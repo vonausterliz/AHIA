@@ -1,0 +1,6 @@
+streamlit>=1.40
+pandas>=2.0
+pdfplumber>=0.11
+pymupdf>=1.24
+altair>=5.0
+numpy>=1.24

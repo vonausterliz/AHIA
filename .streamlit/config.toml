@@ -1,0 +1,27 @@
+# AHIA — configurazione Streamlit
+
+[theme]
+# Tema chiaro come predefinito. L'utente puo' comunque passare a quello scuro
+# dal menu in alto a destra: la sua scelta ha la precedenza su questa.
+base = "light"
+
+[client]
+# Nasconde i link "Ask Google" / "Ask ChatGPT" nei riquadri di errore:
+# invierebbero il traceback a un servizio esterno, e in un'app che tratta
+# referti medici il traceback puo' contenere percorsi, nomi di file e valori.
+showErrorLinks = false
+
+[browser]
+# Nessuna statistica d'uso verso Streamlit.
+gatherUsageStats = false
+
+[server]
+# Solo interfaccia locale: l'app non e' raggiungibile dalla rete.
+address = "localhost"
+headless = true
+# Protezione CSRF sui caricamenti: e' il valore predefinito, esplicitato qui
+# perche' su un'app che riceve file non va disattivato per errore.
+enableXsrfProtection = true
+# Un referto e' di norma sotto il megabyte: il limite predefinito di Streamlit
+# e' 200 MB, che permetterebbe di riempire il disco con un solo caricamento.
+maxUploadSize = 25
