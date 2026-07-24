@@ -309,3 +309,8 @@ Il modello non fa diagnosi. Non conosce la storia clinica, il motivo della
 prescrizione né l'esame obiettivo, e su un 14B le interpretazioni cliniche sono
 plausibili ma non affidabili. È uno strumento per vedere gli andamenti e
 arrivare preparati dal medico.
+
+
+> [!NOTE]
+> Testato su macOS. Il supporto Linux e  Windows è implementato ma non ancora
+> collaudato su un sistema reale: segnalazioni benvenute.
