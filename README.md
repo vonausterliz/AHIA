@@ -20,6 +20,15 @@ Le modifiche di ciascun rilascio sono in `CHANGELOG.md`.
 Funziona su macOS, Linux e Windows. Tutte le dipendenze hanno wheel
 precompilate per i tre sistemi, quindi l'installazione non compila nulla.
 
+> [!NOTE]
+> Sviluppato e collaudato su macOS. Su Linux dovrebbe funzionare senza
+> problemi — condivide con macOS le fondamenta Unix — ma non l'ho ancora
+> verificato di persona. Il supporto Windows è implementato (script `.bat`,
+> percorsi portabili, nomi file sanificati) ma non provato su un sistema
+> reale. Riscontri su Linux e Windows sono benvenuti nella
+> [issue dedicata](../../issues).
+
+
 ## Installazione
 
 Scompatta l'archivio, entra nella cartella e lancia lo script, che crea il
@@ -310,7 +319,3 @@ prescrizione né l'esame obiettivo, e su un 14B le interpretazioni cliniche sono
 plausibili ma non affidabili. È uno strumento per vedere gli andamenti e
 arrivare preparati dal medico.
 
-
-> [!NOTE]
-> Testato su macOS. Il supporto Linux e  Windows è implementato ma non ancora
-> collaudato su un sistema reale: segnalazioni benvenute.
