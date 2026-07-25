@@ -1,7 +1,7 @@
 """AHIA — estrazione strutturata da referti PDF (nativi o scansionati)."""
 
 # AHIA — archivio e lettura dei referti medici, in locale.
-# Copyright (C) 2026  {AUTORE}
+# Copyright (C) 2026  vonausterliz
 #
 # Questo programma e' software libero: puoi ridistribuirlo e/o modificarlo
 # secondo i termini della GNU Affero General Public License, versione 3, come
@@ -22,7 +22,8 @@ from pathlib import Path
 
 import core
 from config import (
-    ALIAS_BASE, CONVERSIONI, DPI_RASTER, FUNZIONI, MIN_CHARS_PAGINA, TIPI,
+    ALIAS_BASE, CONVERSIONI, DPI_RASTER, FUNZIONI, MIN_CHARS_PAGINA,
+    RITENTATIVI_ESTRAZIONE, TIPI,
 )
 
 SCHEMA = {
@@ -125,13 +126,18 @@ def _metriche(risposta: dict, model: str, etichetta: str) -> dict:
 
 def _chiama(model: str, funzione: str, contenuto: str,
             immagini: list[str] | None = None,
-            etichetta: str = "") -> tuple[dict, dict]:
+            etichetta: str = "", istruzione_layout: str = "") -> tuple[dict, dict]:
     messaggio = {"role": "user", "content": contenuto}
     if immagini:
         messaggio["images"] = immagini
+    sistema = PROMPT
+    if istruzione_layout:
+        sistema += ("\n\nISTRUZIONI SPECIFICHE PER QUESTO LAYOUT (scoperte da "
+                    "un'analisi precedente, seguile con attenzione):\n"
+                    + istruzione_layout)
     payload = {
         "model": model,
-        "messages": [{"role": "system", "content": PROMPT}, messaggio],
+        "messages": [{"role": "system", "content": sistema}, messaggio],
         "format": SCHEMA,
         "stream": False,
         "think": FUNZIONI[funzione]["think"],
@@ -172,8 +178,13 @@ def _pagine_immagini(path: Path) -> list[str]:
 
 
 def elabora_documento(path: Path, modelli: dict, tipo_forzato: str | None = None,
-                      progress=None) -> dict:
+                      progress=None, istruzione_layout: str = "",
+                      scheda_per_lab=None) -> dict:
     """Legge un documento sanitario, lo classifica ed estrae cio' che serve.
+
+    Se `scheda_per_lab` e' una funzione, viene chiamata col laboratorio dedotto
+    dalla classificazione: se restituisce una scheda di lettura, questa viene
+    usata gia' alla prima (e unica) estrazione, senza doppioni.
 
     Restituisce:
       tipo, data_documento, titolo, struttura, origine ("nativo"/"scansione"),
@@ -196,12 +207,19 @@ def elabora_documento(path: Path, modelli: dict, tipo_forzato: str | None = None
             progress(f"{len(immagini)} pagine convertite in immagine")
     origine = "nativo" if testo is not None else "scansione"
 
-    def chiama(model, funzione, contenuto, imgs=None, etichetta=""):
-        dati, metrica = _chiama(model, funzione, contenuto, imgs, etichetta)
+    def chiama(model, funzione, contenuto, imgs=None, etichetta="", layout=None):
+        istr = layout if layout is not None else istruzione_layout
+        dati, metrica = core.con_battito(
+            lambda: _chiama(model, funzione, contenuto, imgs, etichetta,
+                            istruzione_layout=istr),
+            progress=progress, etichetta=f"{model} · {etichetta or funzione}")
         log.append(metrica)
         if progress:
             progress(_riassunto(metrica))
         return dati
+
+    if istruzione_layout and progress:
+        progress("Uso la scheda di lettura nota per questo laboratorio.")
 
     # 1. tipologia: basta la prima pagina
     if tipo_forzato:
@@ -210,11 +228,15 @@ def elabora_documento(path: Path, modelli: dict, tipo_forzato: str | None = None
         if progress:
             progress(f"Tipologia forzata: {TIPI[tipo_forzato]['label']}")
     else:
+        # Per una scansione la classificazione deve usare il modello vision:
+        # quello testuale non accetta immagini e fallirebbe.
+        mod_classe = (modelli["classificazione"] if testo is not None
+                      else modelli["estrazione_vision"])
         if progress:
-            progress(f"Riconoscimento del tipo con {modelli['classificazione']}…")
+            progress(f"Riconoscimento del tipo con {mod_classe}…")
         anteprima = (testo[:6000] if testo is not None
-                     else "Prima pagina del documento.")
-        doc = classifica(modelli["classificazione"], anteprima,
+                     else "Prima pagina del documento (immagine).")
+        doc = classifica(mod_classe, anteprima,
                          immagini[0] if immagini else None)
     tipo = doc.get("tipo", "altro")
     if progress and not tipo_forzato:
@@ -225,6 +247,18 @@ def elabora_documento(path: Path, modelli: dict, tipo_forzato: str | None = None
             dettagli.append(doc["struttura"])
         progress("Riconosciuto: " + " · ".join(dettagli)
                  + (f" — {doc['motivazione']}" if doc.get("motivazione") else ""))
+
+    # Se conosco il laboratorio dalla classificazione e ho una sua scheda di
+    # lettura, la applico gia' a questa estrazione: una sola volta, non due.
+    scheda_attiva = istruzione_layout
+    if scheda_per_lab and not scheda_attiva:
+        lab_dedotto = doc.get("struttura", "")
+        if lab_dedotto:
+            trovata = scheda_per_lab(lab_dedotto)
+            if trovata:
+                scheda_attiva = trovata
+                if progress:
+                    progress(f"Uso la scheda di lettura nota per «{lab_dedotto}».")
 
     risultato = {"tipo": tipo, "origine": origine,
                  "testo": testo or "",
@@ -239,7 +273,8 @@ def elabora_documento(path: Path, modelli: dict, tipo_forzato: str | None = None
             if progress:
                 progress(f"{TIPI[tipo]['label']}, PDF nativo: estrazione valori…")
             dati = chiama(modelli["estrazione_testo"], "estrazione_testo",
-                          "Referto:\n\n" + testo, etichetta="valori")
+                          "Referto:\n\n" + testo, etichetta="valori",
+                          layout=scheda_attiva)
             risultato["esami"] = dati.get("esami", [])
             if progress:
                 progress(f"{len(risultato['esami'])} valori letti dalla tabella")
@@ -256,7 +291,7 @@ def elabora_documento(path: Path, modelli: dict, tipo_forzato: str | None = None
                     progress(f"Scansione: valori dalla pagina {i}/{len(immagini)}…")
                 dati = chiama(modelli["estrazione_vision"], "estrazione_vision",
                               f"Referto, pagina {i}. Estrai gli esami.", [img],
-                              etichetta=f"valori p.{i}")
+                              etichetta=f"valori p.{i}", layout=scheda_attiva)
                 unione += dati.get("esami", [])
                 risultato["data_documento"] = (
                     risultato["data_documento"]
@@ -540,3 +575,209 @@ def normalizza(esame: dict, alias: dict[str, str], sconosciuti: set[str]) -> dic
     return {"analita": canonico, "nome_referto": nome, "valore": valore,
             "operatore": operatore, "valore_testo": testo, "unita": unita,
             "range_min": rmin, "range_max": rmax, "flag": flag}
+
+
+# --- Analisi preventiva della struttura ------------------------------------
+
+PROMPT_STRUTTURA = """Sei un esperto di referti di laboratorio italiani. Ti do il
+testo grezzo di un referto di un laboratorio che non abbiamo mai visto. NON
+estrarre i valori: studia solo COM'E' FATTO, per guidare un modello piu' piccolo
+che estrarra' i dati dai referti di questo stesso laboratorio.
+
+Osserva e descrivi:
+- come sono disposti i valori (una colonna? piu' colonne affiancate? il valore
+  e' vicino o lontano dal nome dell'esame?);
+- dove si trova l'intervallo di riferimento rispetto al valore;
+- dove sono l'unita' di misura e le eventuali marcature (alto/basso, asterischi);
+- quali righe sono intestazioni, sezioni o totali da NON confondere con i dati;
+- qualsiasi insidia di impaginazione (valori su due colonne da leggere
+  separatamente, numeri con la virgola decimale, note a pie' di pagina).
+
+Produci una scheda di lettura: istruzioni operative, concrete e specifiche per
+QUESTO layout, che dicano al modello di estrazione dove guardare e cosa evitare.
+Non descrivere in astratto: scrivi istruzioni azionabili. Rispondi con la sola
+scheda, in italiano, senza preamboli."""
+
+
+def analizza_struttura(model: str, testo: str,
+                       immagini: list[str] | None = None) -> str:
+    """Scheda di lettura del layout, da iniettare nel prompt di estrazione."""
+    messaggio = {"role": "user", "content": f"Referto:\n\n{testo[:6000]}"}
+    if immagini:
+        messaggio["images"] = immagini
+    payload = {
+        "model": model,
+        "messages": [{"role": "system", "content": PROMPT_STRUTTURA}, messaggio],
+        "stream": False, "think": FUNZIONI["analisi_struttura"]["think"],
+        "options": {"temperature": FUNZIONI["analisi_struttura"]["temperature"],
+                    "num_ctx": FUNZIONI["analisi_struttura"]["num_ctx"]},
+    }
+    with core.post_ollama(payload) as resp:
+        return json.loads(resp.read().decode())["message"]["content"].strip()
+
+
+
+# --- Diagnosi delle estrazioni difficili -----------------------------------
+
+SCHEMA_DIAGNOSI = {
+    "type": "object",
+    "properties": {
+        "problema": {"type": "string"},
+        "istruzione_layout": {"type": "string"},
+        "gravita": {"type": "string", "enum": ["lieve", "media", "grave"]},
+    },
+    "required": ["problema", "istruzione_layout"],
+}
+
+PROMPT_DIAGNOSI = """Sei un esperto di estrazione dati da referti di laboratorio
+italiani. Un modello piu' piccolo ha estratto male i valori da questo referto.
+Ti do il testo grezzo del referto e cio' che il modello ha prodotto.
+
+Confronta le due cose e capisci COSA e' andato storto nella lettura. Cause
+tipiche: valori su piu' colonne affiancate letti in fila; virgola decimale
+scambiata per separatore di migliaia; intervallo di riferimento su una riga
+diversa dal valore e attribuito all'esame sbagliato; unita' di misura staccata
+dal numero; intestazioni ripetute lette come dati; valori multipli per lo
+stesso esame (es. prima e dopo).
+
+Produci:
+- problema: una spiegazione in una o due frasi, leggibile, di cosa e' andato
+  storto. Se l'estrazione ti sembra invece corretta, dillo chiaramente qui.
+- istruzione_layout: un'istruzione operativa e specifica, da aggiungere al
+  prompt di estrazione, che aiuti a leggere correttamente QUESTO tipo di
+  impaginazione. Concreta ("i valori sono in due colonne: estrai prima tutti
+  quelli della colonna sinistra, poi quelli della destra"), non generica
+  ("presta attenzione"). Stringa vuota se l'estrazione era gia' corretta.
+- gravita: quanto e' compromessa l'estrazione.
+
+Rispondi SOLO con il JSON conforme allo schema."""
+
+
+def diagnostica(model: str, testo_grezzo: str, esami_estratti: list[dict]) -> dict:
+    """Analizza un'estrazione fallita e propone un'istruzione per il layout."""
+    riepilogo = json.dumps(esami_estratti, ensure_ascii=False, indent=1)[:4000]
+    contenuto = (f"TESTO GREZZO DEL REFERTO:\n{testo_grezzo[:6000]}\n\n"
+                 f"ESTRAZIONE PRODOTTA DAL MODELLO PICCOLO:\n{riepilogo}")
+    payload = {
+        "model": model,
+        "messages": [{"role": "system", "content": PROMPT_DIAGNOSI},
+                     {"role": "user", "content": contenuto}],
+        "format": SCHEMA_DIAGNOSI, "stream": False,
+        "think": FUNZIONI["diagnosi_estrazione"]["think"],
+        "options": {"temperature": FUNZIONI["diagnosi_estrazione"]["temperature"],
+                    "num_ctx": FUNZIONI["diagnosi_estrazione"]["num_ctx"]},
+    }
+    with core.post_ollama(payload) as resp:
+        testo = json.loads(resp.read().decode())["message"]["content"]
+    return json.loads(re.sub(r"^```(?:json)?|```$", "", testo.strip(),
+                             flags=re.MULTILINE).strip())
+
+
+def riestrai(model: str, funzione: str, testo: str,
+             istruzione_layout: str = "") -> list[dict]:
+    """Riesegue l'estrazione dei valori, con l'eventuale istruzione di layout."""
+    dati, _ = _chiama(model, funzione, "Referto:\n\n" + testo,
+                      etichetta="riestrazione",
+                      istruzione_layout=istruzione_layout)
+    return dati.get("esami", [])
+
+
+def riestrai_se_migliora(path, doc: dict, scheda: str, modelli: dict,
+                         progress=None) -> dict:
+    """Ri-estrae i valori con la scheda di layout e li tiene solo se migliorano.
+
+    A differenza di rifare elabora_documento, NON riclassifica il documento:
+    riusa tipo, data e struttura gia' noti, e ri-lancia solo l'estrazione dei
+    valori. Cosi' la scheda costa una chiamata sola, non due. Se il nuovo esito
+    non e' migliore del precedente, si tiene quello originale.
+    """
+    testo = doc.get("testo", "")
+    if not testo.strip():
+        return doc  # senza testo grezzo non si puo' ri-estrarre
+    nuovi = core.con_battito(
+        lambda: riestrai(modelli["estrazione_testo"], "estrazione_testo",
+                         testo, scheda),
+        progress=progress, etichetta=f"{modelli['estrazione_testo']} · con scheda")
+    if _estrazione_migliore(nuovi, doc.get("esami", [])):
+        if progress:
+            progress(f"Migliorata con la scheda: {len(nuovi)} valori "
+                     f"(erano {len(doc.get('esami', []))}).")
+        doc = {**doc, "esami": nuovi}
+    elif progress:
+        progress("La scheda non migliora l'estrazione: tengo quella iniziale.")
+    return doc
+
+
+def recupera_estrazione(conn, sha: str, testo: str, esami_attuali: list[dict],
+                        laboratorio: str, modelli: dict,
+                        progress=None) -> dict:
+    """Pipeline per un referto estratto male: diagnosi, ritentativi, presa in carico.
+
+    1. il modello grosso diagnostica cosa e' andato storto e propone
+       un'istruzione per il layout;
+    2. il modello normale ritenta con quell'istruzione, fino a
+       RITENTATIVI_ESTRAZIONE volte;
+    3. se ancora non basta, il modello grosso estrae lui.
+
+    Tutto in locale: nulla lascia la macchina. Restituisce esami, quale fase ha
+    prodotto il risultato, la diagnosi e l'istruzione (da salvare a parte).
+    """
+    def nota(m):
+        if progress:
+            progress(m)
+
+    # 1. diagnosi
+    nota(f"Diagnosi con {modelli['diagnosi_estrazione']}…")
+    diag = diagnostica(modelli["diagnosi_estrazione"], testo, esami_attuali)
+    istruzione = (diag.get("istruzione_layout") or "").strip()
+    nota(f"Problema rilevato: {diag.get('problema', 'n/d')}")
+
+    esiti = {"diagnosi": diag, "istruzione": istruzione,
+             "esami": esami_attuali, "fase": "nessun cambiamento",
+             "laboratorio": laboratorio}
+
+    if not istruzione:
+        nota("La diagnosi non ha prodotto un'istruzione: l'estrazione "
+             "sembra gia' corretta, oppure il problema non e' di layout.")
+        return esiti
+
+    # 2. ritentativi con il modello normale
+    for tentativo in range(1, RITENTATIVI_ESTRAZIONE + 1):
+        nota(f"Nuovo tentativo {tentativo}/{RITENTATIVI_ESTRAZIONE} "
+             f"con {modelli['estrazione_testo']} e l'istruzione trovata…")
+        nuovi = riestrai(modelli["estrazione_testo"], "estrazione_testo",
+                         testo, istruzione)
+        if _estrazione_migliore(nuovi, esiti["esami"]):
+            nota(f"Migliorata: {len(nuovi)} valori estratti.")
+            esiti.update(esami=nuovi, fase=f"ritentativo {tentativo}")
+            return esiti
+
+    # 3. presa in carico dal modello grosso
+    nota(f"Presa in carico da {modelli['estrazione_accurata']}…")
+    grossi = riestrai(modelli["estrazione_accurata"], "estrazione_accurata",
+                      testo, istruzione)
+    if _estrazione_migliore(grossi, esiti["esami"]):
+        nota(f"Il modello grosso ha estratto {len(grossi)} valori.")
+        esiti.update(esami=grossi, fase="modello grosso")
+    else:
+        nota("Nemmeno il modello grosso ha fatto meglio: l'estrazione "
+             "originale resta invariata.")
+    return esiti
+
+
+def _estrazione_migliore(nuova: list[dict], vecchia: list[dict]) -> bool:
+    """Euristica prudente: la nuova estrazione e' preferibile?
+
+    Conta i valori numerici plausibili: piu' valori validi, meno righe vuote o
+    palesemente rotte. Non decide da sola cosa e' giusto — quella scelta resta
+    all'utente, che vede entrambe — ma evita di proporre un cambiamento che
+    peggiora.
+    """
+    def validi(righe):
+        n = 0
+        for e in righe:
+            v = parse_valore(str(e.get("valore", "")))[0]
+            if v is not None and abs(v) < 1e6:
+                n += 1
+        return n
+    return validi(nuova) > validi(vecchia)

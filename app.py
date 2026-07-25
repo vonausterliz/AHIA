@@ -4,7 +4,7 @@ Avvio:  streamlit run app.py
 """
 
 # AHIA — archivio e lettura dei referti medici, in locale.
-# Copyright (C) 2026  {AUTORE}
+# Copyright (C) 2026  vonausterliz
 #
 # Questo programma e' software libero: puoi ridistribuirlo e/o modificarlo
 # secondo i termini della GNU Affero General Public License, versione 3, come
@@ -17,11 +17,13 @@ Avvio:  streamlit run app.py
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import time
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 import config
 import core
@@ -30,6 +32,7 @@ import ingest
 import parere
 import riferimenti
 import semantica
+import segreti
 import strumenti
 import utenti
 from config import (BRANI_NEL_CONTESTO, DATA_DIR, DISCLAIMER,
@@ -39,6 +42,55 @@ from config import (BRANI_NEL_CONTESTO, DATA_DIR, DISCLAIMER,
 
 st.set_page_config(page_title="AHIA — referti e andamenti",
                    page_icon=":material/monitor_heart:", layout="wide")
+
+st.markdown("""<style>
+/* --- AHIA, foglio di stile: sobrio, leggibile, da strumento clinico --- */
+
+/* Larghezza di lettura contenuta: il testo non si stira su schermi larghi */
+.block-container { max-width: 1180px; padding-top: 2.4rem; padding-bottom: 4rem; }
+
+/* Titoli piu' ariosi e con meno peso, per un tono calmo */
+h1, h2, h3 { letter-spacing: -0.01em; font-weight: 650; }
+h2 { margin-top: 0.6rem; padding-bottom: 0.3rem;
+     border-bottom: 1px solid rgba(47,109,106,0.14); }
+h3 { color: #2f6d6a; }
+
+/* Schede: piu' spazio, sottolineatura netta su quella attiva */
+.stTabs [data-baseweb="tab-list"] { gap: 0.4rem; }
+.stTabs [data-baseweb="tab"] {
+    padding: 0.5rem 0.9rem; border-radius: 8px 8px 0 0; }
+.stTabs [aria-selected="true"] {
+    background: rgba(47,109,106,0.08);
+    border-bottom: 2px solid #2f6d6a; }
+
+/* Pulsanti: angoli morbidi, transizione discreta */
+.stButton button, .stDownloadButton button {
+    border-radius: 8px; font-weight: 550; transition: all 0.15s ease; }
+.stButton button:hover { transform: translateY(-1px); }
+
+/* Riquadri e contenitori con bordo piu' leggero */
+[data-testid="stExpander"], div[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 10px; }
+
+/* Tabelle: intestazione in tinta, righe piu' respirate */
+[data-testid="stDataFrame"] thead tr th {
+    background: #eef4f4 !important; font-weight: 600; }
+
+/* Metriche: numero grande in tinta guida */
+[data-testid="stMetricValue"] { color: #2f6d6a; font-weight: 680; }
+
+/* Barra laterale: separazione morbida dal contenuto */
+section[data-testid="stSidebar"] {
+    background: #f4f8f8; border-right: 1px solid rgba(47,109,106,0.10); }
+section[data-testid="stSidebar"] h1 {
+    font-size: 2.6rem; font-weight: 700; letter-spacing: 0.04em;
+    color: #2f6d6a; padding-bottom: 0.1rem; }
+section[data-testid="stSidebar"] h1 span[data-testid="stIconMaterial"] {
+    font-size: 2.2rem; vertical-align: -3px; }
+
+/* Avvisi piu' morbidi, meno "allarme" visivo */
+[data-testid="stAlert"] { border-radius: 9px; }
+</style>""", unsafe_allow_html=True)
 
 
 @st.cache_resource
@@ -70,6 +122,105 @@ def brani_pertinenti(utente_id: int, domanda: str, modello: str,
 
 
 auth = get_auth()
+
+
+def _pannello_diagnosi(conn, archivio, doc, modelli, alias):
+    """Diagnosi e recupero di un'estrazione, con l'utente che decide se applicare."""
+    sha = doc["sha256"]
+    with st.container(border=True):
+        testo = core.leggi_testo(conn, sha)
+        if not testo.strip():
+            st.warning("Di questo referto non è stato conservato il testo grezzo "
+                       "(caricato con una versione precedente, o scansione). "
+                       "La diagnosi lavora sul testo: ricaricalo per usarla.")
+            if st.button("Chiudi", key=f"chiudi_diag_notesto_{sha}"):
+                st.session_state.pop("diagnostica_sha", None)
+                st.rerun()
+            return
+
+        attuali = [dict(r) for r in conn.execute(
+            "SELECT nome_referto, valore_testo AS valore, unita, range_min, "
+            "range_max FROM risultati WHERE sha256 = ?", (sha,)).fetchall()]
+        lab = doc["struttura"] or ""
+
+        chiave_esiti = f"esiti_diag_{sha}"
+        if chiave_esiti not in st.session_state:
+            righe_log = []
+            with st.status("Analisi in corso…", expanded=True) as stato:
+                try:
+                    esiti = ingest.recupera_estrazione(
+                        conn, sha, testo, attuali, lab, modelli,
+                        progress=lambda m: (righe_log.append(m), stato.write(m)))
+                    st.session_state[chiave_esiti] = esiti
+                    stato.update(label="Analisi completata", state="complete")
+                except core.ErroreOllama as e:
+                    stato.update(label="Errore", state="error")
+                    st.error(str(e))
+                    if st.button("Chiudi", key=f"chiudi_err_{sha}"):
+                        st.session_state.pop("diagnostica_sha", None)
+                        st.rerun()
+                    return
+
+        esiti = st.session_state.get(chiave_esiti)
+        if not esiti:
+            return
+
+        st.markdown(f"**Problema rilevato** — {esiti['diagnosi'].get('problema', 'n/d')}")
+        if esiti["istruzione"]:
+            st.caption(f"Istruzione per questo layout: {esiti['istruzione']}")
+
+        if esiti["fase"] in ("nessun cambiamento",):
+            st.info("L'estrazione attuale sembra già la migliore possibile: "
+                    "non è stata cambiata.")
+        else:
+            st.success(f"Proposta una nuova estrazione ({esiti['fase']}): "
+                       f"da {len(attuali)} a {len(esiti['esami'])} valori.")
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.caption("**Attuale**")
+                st.dataframe(pd.DataFrame(attuali)[["nome_referto", "valore", "unita"]],
+                             hide_index=True, height=200)
+            with col_b:
+                st.caption("**Proposta**")
+                st.dataframe(pd.DataFrame(esiti["esami"])[
+                    [c for c in ("nome_referto", "valore", "unita")
+                     if c in (esiti["esami"][0] if esiti["esami"] else {})]],
+                    hide_index=True, height=200)
+
+        c1, c2, c3 = st.columns(3)
+        applicabile = esiti["fase"] not in ("nessun cambiamento",)
+        if c1.button("Applica la nuova estrazione", type="primary",
+                     icon=":material/check:", disabled=not applicabile,
+                     key=f"applica_diag_{sha}", width="stretch"):
+            righe = [r for e in esiti["esami"]
+                     if (r := ingest.normalizza(e, alias, set()))]
+            core.sostituisci_valori(conn, sha, righe)
+            if esiti["istruzione"]:
+                core.salva_istruzione_layout(conn, lab,
+                                             esiti["diagnosi"].get("problema", ""),
+                                             esiti["istruzione"])
+            st.session_state.pop("diagnostica_sha", None)
+            st.session_state.pop(chiave_esiti, None)
+            st.success("Estrazione aggiornata.")
+            st.rerun()
+
+        if esiti["istruzione"] and c2.button(
+                "Salva solo l'istruzione", icon=":material/bookmark:",
+                key=f"salva_istr_{sha}", width="stretch",
+                help="Conserva l'istruzione per i prossimi referti di questo "
+                     "laboratorio, senza toccare i valori attuali."):
+            core.salva_istruzione_layout(conn, lab,
+                                         esiti["diagnosi"].get("problema", ""),
+                                         esiti["istruzione"])
+            st.session_state.pop("diagnostica_sha", None)
+            st.session_state.pop(chiave_esiti, None)
+            st.rerun()
+
+        if c3.button("Chiudi senza applicare", key=f"chiudi_diag_{sha}",
+                     width="stretch"):
+            st.session_state.pop("diagnostica_sha", None)
+            st.session_state.pop(chiave_esiti, None)
+            st.rerun()
 
 
 def _primo_avvio():
@@ -126,6 +277,9 @@ def _accedi():
             utente, errore = utenti.verifica(auth, nome, password)
             if utente:
                 st.session_state["utente"] = utente
+                # serve per cifrare/decifrare le chiavi API; resta solo in
+                # sessione, in memoria, non viene mai persistita
+                st.session_state["chiave_sessione"] = password
                 st.rerun()
             else:
                 st.error(errore)
@@ -144,6 +298,7 @@ def _cambia_password_obbligatorio(utente: dict):
                 st.error(errore)
             else:
                 st.session_state["utente"]["cambio_password"] = False
+                st.session_state["chiave_sessione"] = pw1
                 st.rerun()
 
 
@@ -166,9 +321,11 @@ e_admin = utente_corrente["ruolo"] == "admin"
 # file diverso per ogni utente, quindi nessuna query puo' vedere altri dati.
 archivio = config.Archivio(utente_corrente["id"])
 conn = get_archivio(utente_corrente["id"])
+segreti.prepara(conn)  # crea la tabella se manca (archivi anteriori alla 1.6.0)
 alias = ingest.carica_alias(archivio.alias)
 
 CHIAVE_DISCLAIMER = "disclaimer.versione_accettata"
+CHIAVE_DISCLAIMER_QUANDO = "disclaimer.accettato_il"
 
 
 @st.dialog("Prima di usare AHIA — Before using AHIA", width="large")
@@ -177,12 +334,20 @@ def avvertenza(bloccante: bool = True):
                                   default="Italiano", label_visibility="collapsed")
     st.markdown(DISCLAIMER["en" if lingua == "English" else "it"])
     if not bloccante:
+        quando = core.leggi_impostazioni(conn).get(CHIAVE_DISCLAIMER_QUANDO)
+        versione = core.leggi_impostazioni(conn).get(CHIAVE_DISCLAIMER)
+        if quando:
+            istante = quando.replace("T", " alle ")
+            st.caption(f":material/history: Avvertenza (versione {versione}) "
+                       f"accettata il {istante}.")
         return
     letto = st.checkbox("Ho letto e compreso quanto sopra / "
                         "I have read and understood the above")
     if st.button("Accetto e prosegui / Accept and continue", type="primary",
                  icon=":material/check:", disabled=not letto, key="btn_accetto_e_prosegui_accept_and_cont_182"):
         core.salva_impostazione(conn, CHIAVE_DISCLAIMER, DISCLAIMER_VERSIONE)
+        core.salva_impostazione(conn, CHIAVE_DISCLAIMER_QUANDO,
+                                dt.datetime.now().isoformat(timespec="seconds"))
         st.rerun()
 
 
@@ -239,21 +404,6 @@ def mostra_risposta(model: str, messaggi: list[dict], funzione: str) -> str:
 # --- Barra laterale --------------------------------------------------------
 
 with st.sidebar:
-    # CSS su una stringa costante scritta qui: nessun dato esterno finisce
-    # nel markup, a differenza dei nomi provenienti dai referti.
-    st.markdown(
-        """<style>
-        section[data-testid="stSidebar"] h1 {
-            font-size: 2.9rem;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            padding-bottom: 0.1rem;
-        }
-        section[data-testid="stSidebar"] h1 span[data-testid="stIconMaterial"] {
-            font-size: 2.4rem;
-            vertical-align: -4px;
-        }
-        </style>""", unsafe_allow_html=True)
     st.title(":material/monitor_heart: AHIA")
     st.caption(f"Archivio e lettura dei tuoi referti · v{VERSIONE}")
     modelli = core.modelli_disponibili()
@@ -376,6 +526,25 @@ with st.sidebar:
         st.rerun()
 
     st.caption(f"Dati in `{DATA_DIR}` — nulla lascia questa macchina.")
+
+    with st.expander("I miei dati", icon=":material/database:"):
+        st.caption("Esporta tutto il tuo archivio in un file zip: referti, "
+                   "valori, profilo, dizionario. Serve da backup e per spostarti "
+                   "su un'altra installazione.")
+        zip_dati = utenti.esporta_archivio(utente_corrente["id"])
+        if zip_dati:
+            import datetime as _dt
+            st.download_button(
+                "Esporta il mio archivio (zip)", zip_dati,
+                f"ahia_{utente_corrente['nome_utente']}_"
+                f"{_dt.date.today().isoformat()}.zip",
+                mime="application/zip", icon=":material/download:",
+                width="stretch", key="btn_esporta_mio")
+        else:
+            st.caption("Nessun dato da esportare per ora.")
+        st.caption("Per ripristinarlo su un'altra macchina, scompatta lo zip "
+                   "nella cartella dell'utente, sotto `archivi/`.")
+
     if st.button("Avvertenza e limiti d'uso", icon=":material/info:",
                  width="stretch", key="btn_avvertenza_e_limiti_d_uso_363"):
         avvertenza(bloccante=False)
@@ -455,8 +624,31 @@ with tabs[1]:
              "Si puo' correggere anche dopo, dall'elenco.")
     tipo_scelto = None if tipo_forzato == "Riconosci automaticamente" else tipo_forzato
 
+    analisi_auto = st.checkbox(
+        "Analizza la struttura dei laboratori nuovi",
+        value=st.session_state.get("analisi_auto", config.ANALISI_STRUTTURA_AUTO),
+        key="analisi_auto",
+        help="Sul primo referto di un laboratorio mai visto, il modello "
+             "studia il layout e prepara una scheda di lettura, riusata "
+             "sui referti successivi dello stesso laboratorio. Il primo referto "
+             "di ogni laboratorio viene quindi estratto due volte (una per "
+             "capire il laboratorio, una con la scheda) ed è più lento; i "
+             "successivi partono già con la scheda, in una sola estrazione. "
+             "Disattivala per estrarre sempre una volta sola, senza schede.")
+
     if caricati and st.button("Elabora", type="primary",
                               icon=":material/play_arrow:", key="btn_elabora_442"):
+        # verifica a monte che i modelli scelti siano installati: meglio dirlo
+        # subito che scoprirlo dopo minuti di attesa a metà elaborazione
+        richiesti = dict(scelti)
+        if analisi_auto:
+            richiesti["analisi_struttura"] = scelti.get("analisi_struttura", "")
+        mancanti = core.modelli_mancanti(richiesti)
+        if mancanti:
+            st.error("Modelli non installati: " + ", ".join(f"`{m}`" for m in mancanti)
+                     + ". Scaricali con `ollama pull <nome>` oppure scegline "
+                     "altri nella barra laterale, poi riprova.")
+            st.stop()
         sconosciuti: set[str] = set()
         st.session_state["log"] = []
         st.session_state["registro"] = []
@@ -493,9 +685,34 @@ with tabs[1]:
                 annota(f"Copia archiviata in `{percorso.name}`")
 
                 try:
-                    dati_doc, origine, log_modello = None, None, []
-                    doc = ingest.elabora_documento(percorso, scelti, tipo_scelto,
-                                                   progress=annota)
+                    # Se il laboratorio è già noto, la sua scheda viene applicata
+                    # subito nell'unica estrazione (callback qui sotto). Se è nuovo
+                    # e l'analisi struttura è attiva, la scheda si crea dopo e si
+                    # ri-estrae una volta per applicarla.
+                    doc = ingest.elabora_documento(
+                        percorso, scelti, tipo_scelto, progress=annota,
+                        scheda_per_lab=lambda lab: core.istruzione_layout_per(
+                            conn, lab))
+                    lab = doc.get("struttura", "")
+
+                    gia_nota = bool(lab and core.istruzione_layout_per(conn, lab))
+                    if (not gia_nota and analisi_auto and lab
+                            and e_tabellare(doc.get("tipo", ""))
+                            and doc.get("testo", "").strip()):
+                        annota(f"Laboratorio «{lab}» mai visto: "
+                               f"{scelti['analisi_struttura']} ne studia la "
+                               "struttura…")
+                        scheda = ingest.analizza_struttura(
+                            scelti["analisi_struttura"], doc["testo"])
+                        if scheda:
+                            core.salva_istruzione_layout(
+                                conn, lab, "Scheda di lettura iniziale del layout",
+                                scheda)
+                            annota("Scheda pronta: verifico se migliora "
+                                   "l'estrazione.")
+                            doc = ingest.riestrai_se_migliora(
+                                percorso, doc, scheda, scelti, progress=annota)
+
                     st.session_state["log"] += [{"file": up.name, **r}
                                                 for r in doc["log"]]
                 except core.ErroreOllama as e:
@@ -662,6 +879,29 @@ with tabs[1]:
                             st.write(d["sintesi"])
                             if d["conclusioni"]:
                                 st.markdown(f"**Conclusioni:** {d['conclusioni']}")
+
+                    # segnalazione automatica e recupero dell'estrazione
+                    if e_tabellare(d["tipo"]):
+                        sospetti = core.estrazione_sospetta(conn, d["sha256"])
+                        if sospetti:
+                            with st.container(border=True):
+                                st.caption(":material/warning: Questa estrazione "
+                                           "potrebbe avere problemi:")
+                                for indizio in sospetti:
+                                    st.caption(f"• {indizio}")
+                        if st.button("Diagnostica e correggi l'estrazione",
+                                     icon=":material/healing:",
+                                     key=f"diag_{d['sha256']}",
+                                     disabled=not modelli,
+                                     help="Il modello più capace analizza perché "
+                                          "l'estrazione è venuta male, riprova con "
+                                          "le istruzioni che scopre e, se serve, "
+                                          "rifà lui l'estrazione. Tutto in locale."):
+                            st.session_state["diagnostica_sha"] = d["sha256"]
+
+                    if st.session_state.get("diagnostica_sha") == d["sha256"]:
+                        _pannello_diagnosi(conn, archivio, d, scelti, alias)
+
                     st.divider()
 
         if orfani:
@@ -896,18 +1136,28 @@ with tabs[3]:
                      icon=":material/data_object:"):
         st.markdown(contesto)
 
+    cerca_incoerenze = st.toggle(
+        "Segnala possibili errori di lettura",
+        value=st.session_state.get("cerca_incoerenze", False),
+        key="cerca_incoerenze",
+        help="Il modello aggiunge una sezione con i valori che sospetta mal "
+             "estratti dal PDF (per incoerenza, non per il solo essere fuori "
+             "norma), ciascuno con un pulsante per verificarlo sull'originale. "
+             "Allunga un po' l'analisi.")
+
     if st.button("Genera analisi", type="primary", icon=":material/auto_awesome:",
                  disabled=not modelli, key="btn_genera_analisi_819"):
-        istruzione = core.PROMPT_ANALISI
+        coda = core.PROMPT_INCOERENZE if cerca_incoerenze else ""
+        istruzione = core.PROMPT_ANALISI + coda
         if sha_scelto:
             istruzione = ("Analizza il referto qui sopra. Se ci sono numeri gia' "
                           "calcolati sull'intero archivio, usali per collocare "
                           "questi valori nell'andamento nel tempo.\n\n"
-                          + core.PROMPT_ANALISI)
+                          + core.PROMPT_ANALISI + coda)
         elif tipo_scelto_an:
             istruzione = (f"Analizza i referti di tipo "
                           f"'{etichetta(tipo_scelto_an)}' qui sopra.\n\n"
-                          + core.PROMPT_ANALISI)
+                          + core.PROMPT_ANALISI + coda)
         messaggi = [{"role": "system", "content": core.SYSTEM},
                     {"role": "user", "content": f"{contesto}\n\n{istruzione}"}]
         st.session_state["analisi"] = mostra_risposta(
@@ -916,6 +1166,31 @@ with tabs[3]:
     if st.session_state.get("analisi"):
         st.download_button("Scarica l'analisi (Markdown)", st.session_state["analisi"],
                            "analisi_referti.md", icon=":material/download:")
+
+        # il modello puo' aver segnalato valori sospetti di cattiva estrazione:
+        # ognuno diventa una verifica sul testo grezzo del referto che lo contiene
+        sospetti = core.sospetti_da_analisi(st.session_state["analisi"])
+        if sospetti:
+            st.divider()
+            st.markdown("##### :material/rule: Valori da verificare")
+            st.caption("L'analisi ha notato incoerenze che potrebbero essere "
+                       "errori di lettura del PDF, non valori reali. Verifica "
+                       "controlla il testo originale del referto.")
+            for i, sos in enumerate(sospetti):
+                riga = core.referto_con_analita(conn, sos["analita"])
+                with st.container(border=True):
+                    st.markdown(f"**{sos['analita']}** — {sos['motivo']}")
+                    if not riga:
+                        st.caption("Non trovo a quale referto appartiene: "
+                                   "verificalo a mano nella scheda Referti.")
+                    elif st.button("Verifica sul referto originale",
+                                   icon=":material/healing:", key=f"verif_{i}",
+                                   disabled=not modelli):
+                        st.session_state["diagnostica_sha"] = riga["sha256"]
+                        st.info(f"Apri la scheda **Referti** e cerca il referto "
+                                f"del {riga['data_prelievo'] or 'documento'}: "
+                                "la verifica è pronta lì.")
+
     st.caption("Strumento di lettura, non di diagnosi: i valori vanno interpretati "
                "dal medico alla luce della storia clinica.")
 
@@ -928,7 +1203,7 @@ with tabs[4]:
     conversazioni = {f"{c['id']} · {c['titolo']}": c["id"]
                      for c in core.elenco_conversazioni(conn)}
     c1, c2 = st.columns([3, 1])
-    scelta = c1.selectbox("Conversazione", ["＋ nuova", *conversazioni])
+    scelta = c1.selectbox("Conversazione", ["+ nuova", *conversazioni])
     conv_id = conversazioni.get(scelta)
 
     if conv_id is None:
@@ -1008,6 +1283,20 @@ with tabs[5]:
                "frontiera. Nulla viene inviato da qui: il testo lo copi tu, "
                "dopo averlo letto.")
 
+    st.error(
+        ":material/gpp_maybe: **Nessuna garanzia e nessuna responsabilità.** "
+        "AHIA è progettata perché nulla lasci il tuo computer senza un tuo gesto "
+        "esplicito, e perché il testo del secondo parere sia anonimizzato — ma "
+        "questo **non può essere garantito a priori**. Un bug dell'applicazione, "
+        "di una libreria di terze parti o del servizio esterno, un errore di "
+        "anonimizzazione o un uso improprio possono far sì che dati personali "
+        "escano dal tuo computer o vengano condivisi con terze parti. Usando "
+        "questa funzione accetti che chi ha realizzato AHIA **non si assume "
+        "alcuna responsabilità** per dati personali condivisi, per malfunzionamenti "
+        "propri o di componenti di terze parti, né per un utilizzo errato "
+        "dell'applicazione. Rileggi sempre il testo prima di inviarlo e valuta "
+        "tu se è privo di dati che non vuoi condividere.")
+
     if not core.numero_prelievi(conn):
         st.info("Carica almeno un referto.")
     else:
@@ -1061,8 +1350,50 @@ with tabs[5]:
 
         st.divider()
         st.markdown("**Testo che invieresti** — modificalo liberamente prima di usarlo")
-        testo = st.text_area("quesito", proposta, height=420,
+
+        # Un text_area con chiave "si incolla" al suo valore in sessione e ignora
+        # la proposta ricalcolata: senza questo, aggiungere o togliere la sintesi
+        # locale non aggiornerebbe il testo mostrato. Rigeneriamo il contenuto
+        # quando la proposta di base cambia (nuova sintesi, altra lingua, altri
+        # parametri), preservando invece le modifiche manuali dell'utente finché
+        # la base resta la stessa.
+        if st.session_state.get("quesito_base") != proposta:
+            st.session_state["quesito_base"] = proposta
+            st.session_state["quesito_esterno"] = proposta
+        testo = st.text_area("quesito", height=420,
                              label_visibility="collapsed", key="quesito_esterno")
+
+        # Copia negli appunti con conferma. Il testo e' iniettato come stringa
+        # JSON, quindi virgolette e a-capo non rompono il markup; e' comunque il
+        # quesito gia' anonimizzato che l'utente vede sopra, non dati grezzi.
+        import json as _json
+        testo_js = _json.dumps(testo)
+        components.html(f"""
+        <div style="display:flex;justify-content:flex-end;margin-top:-8px">
+          <button id="cp" style="display:flex;align-items:center;gap:6px;
+            padding:6px 12px;border:1px solid #2f6d6a;border-radius:8px;
+            background:#f1f5f5;color:#2f6d6a;font-weight:550;cursor:pointer;
+            font-family:sans-serif;font-size:14px">
+            <span id="cpi">📋</span><span id="cpt">Copia negli appunti</span>
+          </button>
+        </div>
+        <script>
+          const b = document.getElementById('cp');
+          b.onclick = async () => {{
+            try {{
+              await navigator.clipboard.writeText({testo_js});
+              document.getElementById('cpi').textContent = '✅';
+              document.getElementById('cpt').textContent = 'Copied!';
+              setTimeout(() => {{
+                document.getElementById('cpi').textContent = '📋';
+                document.getElementById('cpt').textContent = 'Copia negli appunti';
+              }}, 1800);
+            }} catch (e) {{
+              document.getElementById('cpt').textContent = 'Copia non riuscita';
+            }}
+          }};
+        </script>
+        """, height=48)
 
         avvisi = parere.verifica(testo, core.leggi_profilo(conn))
         if avvisi:
@@ -1089,6 +1420,99 @@ with tabs[5]:
         else:
             c9.button("Mostra per copiarlo", icon=":material/content_copy:",
                       disabled=True, width="stretch", key="btn_mostra_per_copiarlo_1010")
+
+        # --- Invio diretto a un modello di frontiera ---
+        fornitori_pronti = segreti.fornitori_configurati(conn,
+                                                         utente_corrente["id"])
+        st.divider()
+        if not fornitori_pronti:
+            st.caption(":material/key_off: Per inviare direttamente il quesito, "
+                       "configura una chiave API nel pannello «Chiavi API» qui "
+                       "sotto. Senza, resta il percorso manuale: scarica o "
+                       "copia, e incolla nel servizio che preferisci.")
+        else:
+            scelta = st.selectbox(
+                "Invia a", fornitori_pronti,
+                format_func=lambda f: segreti.FORNITORI[f]["nome"],
+                key="parere_fornitore")
+            pw_sessione = st.session_state.get("chiave_sessione")
+            invia_ora = st.button(
+                f"Invia a {segreti.FORNITORI[scelta]['nome']}",
+                type="primary", icon=":material/send:",
+                disabled=not confermato or not pw_sessione,
+                key="btn_invia_parere",
+                help=None if confermato else "Conferma la lettura del testo prima "
+                                             "di inviare.")
+            if invia_ora and pw_sessione:
+                chiave = segreti.leggi_chiave(conn, utente_corrente["id"],
+                                              pw_sessione, scelta)
+                if not chiave:
+                    st.error("Non riesco a decifrare la chiave API. Se hai "
+                             "reimpostato la password di recente, reinseriscila "
+                             "nel pannello «Chiavi API» qui sotto.")
+                else:
+                    with st.spinner(f"Invio a {segreti.FORNITORI[scelta]['nome']}…"):
+                        try:
+                            risposta = segreti.invia(scelta, chiave, testo)
+                            st.session_state["parere_risposta"] = risposta
+                        except segreti.ErroreAPI as e:
+                            st.session_state["parere_risposta"] = None
+                            st.error(str(e))
+
+            if st.session_state.get("parere_risposta"):
+                st.markdown("#### Risposta")
+                st.info("Viene da un modello esterno: vale come le risposte di "
+                        "AHIA — un supporto alla comprensione, non un parere "
+                        "medico. Portala al tuo medico, non usarla per decidere "
+                        "da solo.")
+                st.markdown(st.session_state["parere_risposta"])
+                st.download_button(
+                    "Scarica la risposta",
+                    st.session_state["parere_risposta"],
+                    "risposta_secondo_parere.md", icon=":material/download:",
+                    key="btn_scarica_risposta")
+
+        with st.expander("Chiavi API per l'invio diretto",
+                         icon=":material/key:"):
+            st.caption("La chiave viene cifrata con una chiave derivata dalla "
+                       "tua password e salvata nel tuo archivio. Non è leggibile "
+                       "senza la tua password, nemmeno dall'amministratore. "
+                       "Reimpostando la password andrà reinserita.")
+            pw_sessione = st.session_state.get("chiave_sessione")
+            if not pw_sessione:
+                st.warning("Riaccedi per gestire le chiavi: servono la password "
+                           "di sessione per cifrarle.")
+            else:
+                configurati = segreti.fornitori_configurati(
+                    conn, utente_corrente["id"])
+                forn = st.selectbox(
+                    "Fornitore", list(segreti.FORNITORI),
+                    format_func=lambda f: segreti.FORNITORI[f]["nome"]
+                    + ("  ✓ configurata" if f in configurati else ""),
+                    key="gestione_fornitore")
+                cfg = segreti.FORNITORI[forn]
+                st.caption(f"Ottieni una chiave da {cfg['dove_chiave']} · "
+                           f"modello usato: `{cfg['modello']}`")
+                nuova = st.text_input(
+                    f"Chiave {cfg['nome']}", type="password",
+                    placeholder=cfg["prefisso"] + "…", key="input_chiave_api")
+                c1, c2 = st.columns(2)
+                if c1.button("Salva la chiave", icon=":material/save:",
+                             width="stretch", key="btn_salva_chiave"):
+                    if errore := segreti.convalida_formato(forn, nuova):
+                        st.error(errore)
+                    else:
+                        segreti.salva_chiave(conn, utente_corrente["id"],
+                                             pw_sessione, forn, nuova.strip())
+                        st.success(f"Chiave {cfg['nome']} salvata e cifrata.")
+                        st.rerun()
+                if forn in configurati and c2.button(
+                        "Rimuovi", icon=":material/delete:", width="stretch",
+                        key="btn_rimuovi_chiave"):
+                    segreti.elimina_chiave(conn, utente_corrente["id"], forn)
+                    st.rerun()
+                st.caption("Le chiamate consumano il credito del tuo account "
+                           "presso il fornitore, secondo le sue tariffe.")
 
         with st.expander("Cosa viene escluso", icon=":material/shield:"):
             st.markdown(
@@ -1287,6 +1711,35 @@ if e_admin:
                                    "visibile.")
                         st.session_state["pw_suggerita"] = utenti.password_suggerita()
 
+        with st.expander("Ripristina da un archivio esportato",
+                         icon=":material/restore:"):
+            st.caption("Carica uno zip esportato da un'altra installazione per "
+                       "ricreare l'utente con i suoi dati. Utile quando ti "
+                       "sposti su hardware diverso.")
+            nome_rip = st.text_input("Nome del nuovo utente", key="nome_ripristino")
+            zip_caricato = st.file_uploader("Archivio (zip)", "zip",
+                                            key="zip_ripristino")
+            if zip_caricato and st.button("Ripristina",
+                                          icon=":material/restore:",
+                                          key="btn_ripristina"):
+                pw_prov = utenti.password_suggerita()
+                errore = utenti.crea(auth, nome_rip, pw_prov, "utente")
+                if errore:
+                    st.error(errore)
+                else:
+                    nuovo_uid = auth.execute(
+                        "SELECT id FROM utenti WHERE nome_utente=?",
+                        (nome_rip,)).fetchone()["id"]
+                    ok, msg = utenti.importa_archivio(nuovo_uid,
+                                                      zip_caricato.getvalue())
+                    if ok:
+                        st.success(f"Utente «{nome_rip}» ripristinato. Password "
+                                   f"provvisoria: `{pw_prov}` — da cambiare al "
+                                   "primo accesso.")
+                    else:
+                        utenti.elimina(auth, nuovo_uid)
+                        st.error(f"Ripristino non riuscito: {msg}")
+
         st.divider()
         st.markdown("**Modifica un utente**")
         indice = {f"{u['nome_utente']} ({'amministratore' if u['ruolo'] == 'admin' else 'utente'})":
@@ -1333,11 +1786,29 @@ if e_admin:
 
         if st.session_state.get("conferma_elimina") == scelto["id"]:
             st.error(f"Eliminare definitivamente «{scelto['nome_utente']}»?")
+
+            zip_utente = utenti.esporta_archivio(scelto["id"])
+            if zip_utente:
+                import datetime as _dt
+                st.caption("Prima di cancellare, puoi salvare i suoi dati — utile "
+                           "per spostarli su un'altra macchina o tenerne copia.")
+                st.download_button(
+                    "Esporta il suo archivio (zip)", zip_utente,
+                    f"ahia_{scelto['nome_utente']}_"
+                    f"{_dt.date.today().isoformat()}.zip",
+                    mime="application/zip", icon=":material/download:",
+                    key="btn_esporta_prima_elimina")
+
             anche_dati = st.checkbox(
                 "Elimina anche il suo archivio sanitario (referti, profilo, "
-                "conversazioni). Irreversibile.")
+                "conversazioni). Irreversibile.", key="chk_anche_dati")
+            conferma = st.text_input(
+                "Per confermare, scrivi il nome utente "
+                f"«{scelto['nome_utente']}»", key="conferma_nome_elimina")
             c1, c2 = st.columns(2)
-            if c1.button("Sì, elimina", type="primary", icon=":material/delete:", key="btn_si_elimina_1257"):
+            pronto = conferma.strip() == scelto["nome_utente"]
+            if c1.button("Sì, elimina", type="primary", icon=":material/delete:",
+                         disabled=not pronto, key="btn_si_elimina_1257"):
                 errore = utenti.elimina(auth, scelto["id"])
                 if not errore and anche_dati:
                     utenti.elimina_archivio(scelto["id"])

@@ -6,7 +6,7 @@ indispensabile perche' la domanda sia clinicamente sensata, e nulla di piu'.
 """
 
 # AHIA — archivio e lettura dei referti medici, in locale.
-# Copyright (C) 2026  {AUTORE}
+# Copyright (C) 2026  vonausterliz
 #
 # Questo programma e' software libero: puoi ridistribuirlo e/o modificarlo
 # secondo i termini della GNU Affero General Public License, versione 3, come
@@ -124,30 +124,70 @@ def quadro_anonimo(conn: sqlite3.Connection, n_referti: int, *,
 # --- Costruzione del quesito -----------------------------------------------
 
 INTESTAZIONE = {
-    "it": """Ti sottopongo esami di laboratorio di una persona, in forma anonima.
-Non ho la storia clinica completa e non sto chiedendo una diagnosi.
+    "it": """Agisci come un medico di medicina interna che commenta esami di
+laboratorio per un collega, non per il paziente. Ti sottopongo i risultati di
+una persona in forma anonima: non ho la storia clinica completa, non ho l'esame
+obiettivo e NON ti sto chiedendo una diagnosi.
 
-Vorrei:
-1. la tua lettura d'insieme dei valori e del loro andamento nel tempo;
-2. quali alterazioni meritano attenzione e quali sono verosimilmente irrilevanti;
-3. quali approfondimenti o esami di conferma avrebbero senso;
-4. quali domande converrebbe porre al medico curante;
-5. eventuali incongruenze nei dati che ti fanno sospettare un errore di
-   trascrizione.
+Vorrei, in questo ordine:
+1. una lettura d'insieme: cosa raccontano questi valori letti insieme, non uno
+   per uno, e come si muovono nel tempo;
+2. quali alterazioni meritano attenzione e quali sono verosimilmente irrilevanti
+   o borderline, distinguendo le due cose;
+3. i collegamenti tra esami che un occhio esperto noterebbe (per esempio pattern
+   epatici, marziali, tiroidei, metabolici) e che a me potrebbero sfuggire;
+4. quali approfondimenti o esami di conferma avrebbero senso, e perche';
+5. quali domande converrebbe che io ponessi al medico curante alla prossima
+   visita;
+6. eventuali incongruenze nei dati che ti fanno sospettare un errore di lettura
+   del referto piu' che un problema clinico.
 
-Se un'informazione ti manca per rispondere, dimmi quale invece di supporla.""",
-    "en": """Below are laboratory results for one anonymous individual.
-I do not have the full clinical history and I am not asking for a diagnosis.
+Vincoli, importanti:
+- Non formulare una diagnosi e non proporre terapie o dosaggi: quello spetta a
+  chi ha in cura la persona e ne conosce il quadro completo.
+- Distingui sempre cio' che i dati mostrano da cio' che ipotizzi: se stai
+  supponendo, dillo.
+- Se un'informazione ti manca per rispondere, indica quale invece di darla per
+  scontata.
+- Non drammatizzare ne' rassicurare oltre quello che i numeri consentono: un
+  valore lievemente fuori norma spesso non significa nulla di per se'.
+- Ragiona su intervalli di riferimento generali per adulti; dove il sesso o
+  l'eta' cambiano l'interpretazione, tienine conto.
 
-I would like:
-1. your overall reading of the values and of how they move over time;
-2. which abnormalities deserve attention and which are likely irrelevant;
-3. what follow-up or confirmatory tests would make sense;
-4. what questions would be worth putting to the treating physician;
-5. any inconsistencies in the data that suggest a transcription error.
+Struttura la risposta con: un riepilogo in tre-quattro righe, poi i punti sopra,
+poi in chiusura le domande per il medico. Scrivi in italiano piano, spiegando i
+termini tecnici la prima volta che li usi.""",
+    "en": """Act as an internal medicine physician commenting on lab results for
+a colleague, not for the patient. Below are one person's results, anonymised: I
+do not have the full clinical history, I have no physical examination, and I am
+NOT asking for a diagnosis.
 
-If something is missing for you to answer, say what it is rather than assume
-it.""",
+I would like, in this order:
+1. an overall reading: what these values say taken together, not one by one, and
+   how they move over time;
+2. which abnormalities deserve attention and which are likely irrelevant or
+   borderline, keeping the two apart;
+3. the links between tests that an expert eye would catch (e.g. hepatic, iron,
+   thyroid, metabolic patterns) and that I might miss;
+4. what follow-up or confirmatory tests would make sense, and why;
+5. what questions I should put to the treating physician at the next visit;
+6. any inconsistencies in the data that point to a report-reading error rather
+   than a clinical problem.
+
+Constraints, important:
+- Do not give a diagnosis and do not suggest treatments or dosages: that is for
+  whoever is treating the person and knows the full picture.
+- Always separate what the data shows from what you are inferring; if you are
+  speculating, say so.
+- If something is missing for you to answer, name it rather than assume it.
+- Do not over-dramatise or over-reassure beyond what the numbers support: a
+  mildly out-of-range value often means nothing on its own.
+- Reason on general adult reference ranges; where sex or age change the reading,
+  take that into account.
+
+Structure the answer as: a three-to-four line summary, then the points above,
+then the questions for the physician at the end. Write in plain language,
+explaining technical terms the first time you use them.""",
 }
 
 CHIUSURA = {

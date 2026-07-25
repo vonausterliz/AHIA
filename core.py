@@ -1,7 +1,7 @@
 """AHIA — livello dati (SQLite), costruzione del contesto e client Ollama."""
 
 # AHIA — archivio e lettura dei referti medici, in locale.
-# Copyright (C) 2026  {AUTORE}
+# Copyright (C) 2026  vonausterliz
 #
 # Questo programma e' software libero: puoi ridistribuirlo e/o modificarlo
 # secondo i termini della GNU Affero General Public License, versione 3, come
@@ -87,6 +87,15 @@ CREATE TABLE IF NOT EXISTS risultati (
 );
 CREATE INDEX IF NOT EXISTS idx_analita_data ON risultati (analita, data_prelievo);
 CREATE INDEX IF NOT EXISTS idx_risultati_sha ON risultati (sha256);
+CREATE TABLE IF NOT EXISTS istruzioni_layout (
+    id INTEGER PRIMARY KEY,
+    laboratorio TEXT NOT NULL,
+    problema TEXT,
+    istruzione TEXT NOT NULL,
+    creata_il TEXT NOT NULL DEFAULT (datetime('now')),
+    usata INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_layout_lab ON istruzioni_layout (laboratorio);
 CREATE TABLE IF NOT EXISTS conversazioni (
     id INTEGER PRIMARY KEY,
     titolo TEXT NOT NULL, modello TEXT,
@@ -337,6 +346,36 @@ def salva_referto(conn, sha: str, nome_file: str, origine: str,
     return nuove
 
 
+def sostituisci_valori(conn, sha: str, righe: list[dict]) -> int:
+    """Rimpiazza i valori di un referto con una nuova estrazione.
+
+    Usato dal recupero dell'estrazione: cancella i valori attuali del documento
+    e inserisce quelli nuovi, conservando data e laboratorio gia' noti.
+    """
+    testa = conn.execute(
+        "SELECT data_prelievo, laboratorio FROM risultati WHERE sha256=? LIMIT 1",
+        (sha,)).fetchone()
+    data = testa["data_prelievo"] if testa else ""
+    lab = testa["laboratorio"] if testa else ""
+    conn.execute("DELETE FROM risultati WHERE sha256 = ?", (sha,))
+    inserite = 0
+    for r in righe:
+        conn.execute(
+            """INSERT INTO risultati
+               (sha256, data_prelievo, laboratorio, analita, nome_referto, valore,
+                operatore, valore_testo, unita, range_min, range_max, flag,
+                origine_range)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (sha, data, lab, r["analita"], r["nome_referto"], r["valore"],
+             r["operatore"], r["valore_testo"], r["unita"],
+             r["range_min"], r["range_max"], r["flag"],
+             "referto" if (r["range_min"] is not None
+                           or r["range_max"] is not None) else None))
+        inserite += 1
+    conn.commit()
+    return inserite
+
+
 def salva_documento(conn, sha: str, dati: dict) -> None:
     """Anagrafica del documento: tipologia, data, titolo e, se narrativo, sintesi."""
     n = dati.get("narrativa") or {}
@@ -440,6 +479,85 @@ def documenti_indicizzati(conn) -> tuple[int, int]:
     return con_testo, totali
 
 
+def estrazione_sospetta(conn, sha: str) -> list[str]:
+    """Indizi che un referto potrebbe essere stato estratto male. Lista vuota
+    se nulla insospettisce. Sono indizi, non certezze: guidano l'occhio."""
+    righe = conn.execute(
+        "SELECT analita, valore, valore_testo, unita, range_min, range_max "
+        "FROM risultati WHERE sha256 = ?", (sha,)).fetchall()
+    if not righe:
+        return ["Nessun valore estratto da questo referto."]
+    indizi = []
+    senza_unita = sum(1 for r in righe if not (r["unita"] or "").strip())
+    if senza_unita > len(righe) / 2:
+        indizi.append(f"{senza_unita} valori su {len(righe)} sono senza unita' "
+                      "di misura.")
+    assurdi = [r["analita"] for r in righe
+               if r["valore"] is not None and abs(r["valore"]) >= 1e5]
+    if assurdi:
+        indizi.append(f"Valori numerici molto grandi, forse mal letti: "
+                      f"{', '.join(assurdi[:4])}.")
+    senza_rif = sum(1 for r in righe
+                    if r["range_min"] is None and r["range_max"] is None)
+    if senza_rif == len(righe) and len(righe) > 3:
+        indizi.append("Nessun valore ha un intervallo di riferimento: potrebbero "
+                      "essere stati persi in lettura.")
+    # confronto con la media dei referti dello stesso laboratorio
+    lab = conn.execute("SELECT laboratorio FROM risultati WHERE sha256=? LIMIT 1",
+                       (sha,)).fetchone()
+    if lab and lab["laboratorio"]:
+        media = conn.execute(
+            """SELECT AVG(n) FROM (SELECT COUNT(*) AS n FROM risultati
+               WHERE laboratorio = ? GROUP BY sha256)""",
+            (lab["laboratorio"],)).fetchone()[0]
+        if media and len(righe) < media * 0.5 and media - len(righe) > 3:
+            indizi.append(f"Solo {len(righe)} valori, contro una media di "
+                          f"{media:.0f} per questo laboratorio: forse ne mancano.")
+    return indizi
+
+
+def salva_istruzione_layout(conn, laboratorio: str, problema: str,
+                            istruzione: str) -> None:
+    """Registra un'istruzione scoperta diagnosticando un'estrazione fallita.
+
+    Un laboratorio impagina di solito allo stesso modo: l'istruzione trovata su
+    un suo referto vale probabilmente per i prossimi. Vengono conservate anche
+    per costruire, col tempo, il materiale con cui migliorare i prompt di base.
+    """
+    if not (laboratorio or "").strip() or not istruzione.strip():
+        return
+    conn.execute(
+        "INSERT INTO istruzioni_layout (laboratorio, problema, istruzione) "
+        "VALUES (?,?,?)", (laboratorio.strip(), problema, istruzione.strip()))
+    conn.commit()
+
+
+def istruzione_layout_per(conn, laboratorio: str) -> str:
+    """L'istruzione piu' recente nota per un laboratorio, se esiste."""
+    if not (laboratorio or "").strip():
+        return ""
+    riga = conn.execute(
+        "SELECT id, istruzione FROM istruzioni_layout WHERE laboratorio = ? "
+        "ORDER BY creata_il DESC LIMIT 1", (laboratorio.strip(),)).fetchone()
+    if riga:
+        conn.execute("UPDATE istruzioni_layout SET usata = usata + 1 WHERE id = ?",
+                     (riga["id"],))
+        conn.commit()
+        return riga["istruzione"]
+    return ""
+
+
+def elenco_istruzioni_layout(conn) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM istruzioni_layout ORDER BY laboratorio, creata_il DESC"
+    ).fetchall()
+
+
+def elimina_istruzione_layout(conn, id_istruzione: int) -> None:
+    conn.execute("DELETE FROM istruzioni_layout WHERE id = ?", (id_istruzione,))
+    conn.commit()
+
+
 def elimina_referto(conn, sha: str) -> None:
     conn.execute("DELETE FROM testi_fts WHERE sha256 = ?", (sha,))
     conn.execute("DELETE FROM file_processati WHERE sha256 = ?", (sha,))
@@ -526,9 +644,71 @@ PROMPT_ANALISI = """Analizza i dati qui sopra e produci:
    quell'esame.
 3. **Andamenti** — analiti che si muovono in modo consistente tra un referto e
    l'altro, anche restando nella norma.
-4. **Da chiedere al medico** — domande concrete da portare alla visita.
-5. **Qualita' del dato** — estrazioni sospette, unita' incoerenti, esami
-   presenti in un referto e assenti in altri."""
+4. **Da chiedere al medico** — domande concrete da portare alla visita."""
+
+# Sezione aggiuntiva, agganciata solo se l'utente attiva il controllo delle
+# incoerenze: allunga l'analisi e va spiegata bene, quindi non e' sempre attiva.
+PROMPT_INCOERENZE = """
+
+5. **Possibili errori di lettura** — questa e' una sezione speciale. I dati che
+   vedi provengono da un'estrazione automatica di PDF e possono contenere errori
+   di trascrizione. Segnala QUI, e solo qui, i valori che sospetti mal estratti
+   PIU' che clinicamente reali. Basati su INCOERENZE, non sul semplice essere
+   fuori range:
+   - valori fisiologicamente impossibili (es. potassiemia di 45 mmol/L);
+   - relazioni interne che non tornano (colesterolo totale molto diverso dalla
+     somma di HDL, LDL e un quinto dei trigliceridi; ematocrito che non e' circa
+     tre volte l'emoglobina; frazioni dell'elettroforesi che non sommano a 100);
+   - un singolo valore che stona con tutto il resto del quadro (un esame epatico
+     isolato altissimo con tutti gli altri marcatori di fegato normali).
+   Un valore semplicemente fuori norma ma coerente col resto NON va qui: quello
+   e' un dato clinico, non un errore. Se non trovi incoerenze di questo tipo,
+   scrivi esattamente "Nessuna incoerenza sospetta.".
+   Per ogni sospetto usa questo formato su una riga:
+   `- [ANALITA] valore attuale — perche' e' incoerente`."""
+
+
+def referto_con_analita(conn, analita: str):
+    """Il referto piu' recente che contiene un dato analita.
+
+    Serve a collegare un sospetto emerso in analisi al documento da riverificare.
+    Il nome puo' arrivare come dicitura o come nome canonico: si prova entrambi.
+    """
+    nome = (analita or "").strip().upper()
+    return conn.execute(
+        """SELECT sha256, data_prelievo FROM risultati
+           WHERE UPPER(analita) = ? OR UPPER(nome_referto) = ?
+           ORDER BY data_prelievo DESC LIMIT 1""", (nome, nome)).fetchone()
+
+
+def sospetti_da_analisi(testo: str) -> list[dict]:
+    """Estrae dall'analisi le righe della sezione «Possibili errori di lettura».
+
+    Il modello le formatta come `- [ANALITA] valore — motivo`. Qui le si
+    riconosce per trasformarle in verifiche puntuali sul testo grezzo.
+    """
+    import re as _re
+
+    if not testo:
+        return []
+    # isola la sezione fino all'intestazione successiva o alla fine
+    m = _re.search(r"(?:Possibili errori di lettura|possibili errori)"
+                   r"[^\n]*\n(.*?)(?:\n#{1,6}\s|\n\*\*\d|\Z)",
+                   testo, _re.S | _re.I)
+    if not m or "nessuna incoerenza" in m.group(1).lower():
+        return []
+    sospetti = []
+    for riga in m.group(1).splitlines():
+        riga = riga.strip()
+        if not riga.startswith(("-", "*")):
+            continue
+        # con l'analita tra parentesi quadre, oppure senza
+        v = (_re.match(r"[-*]\s*\[([^\]]+)\]\s*.+?\s*[—–-]\s*(.+)", riga)
+             or _re.match(r"[-*]\s*([^—–]+?)\s*[—–]\s*(.+)", riga))
+        if v:
+            sospetti.append({"analita": v.group(1).strip(),
+                             "motivo": v.group(2).strip()})
+    return sospetti
 
 
 def statistiche_analiti(conn) -> dict[str, dict]:
@@ -792,6 +972,54 @@ def modelli_disponibili() -> list[str]:
             return sorted(m["name"] for m in json.loads(resp.read())["models"])
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError):
         return []
+
+
+def con_battito(azione, progress=None, ogni: int = 20, etichetta: str = ""):
+    """Esegue azione() battendo un segnale nel progress ogni `ogni` secondi.
+
+    Serve a mostrare che il processo e' vivo durante le chiamate lunghe al
+    modello: senza, un'attesa di due minuti sembra un blocco. Il battito gira
+    in un thread separato e si ferma appena l'azione finisce.
+    """
+    import threading
+    import time
+
+    if progress is None:
+        return azione()
+
+    stop = threading.Event()
+    inizio = time.perf_counter()
+
+    def batte():
+        while not stop.wait(ogni):
+            trascorsi = int(time.perf_counter() - inizio)
+            progress(f"…ancora in corso{' — ' + etichetta if etichetta else ''} "
+                     f"({trascorsi}s)")
+
+    t = threading.Thread(target=batte, daemon=True)
+    t.start()
+    try:
+        return azione()
+    finally:
+        stop.set()
+
+
+def modelli_mancanti(scelti: dict) -> list[str]:
+    """Modelli richiesti dalle funzioni ma non installati in Ollama.
+
+    Il confronto ignora il tag :latest implicito, cosi' "qwen3:14b" combacia
+    anche se Ollama lo elenca come "qwen3:14b". Lista vuota se Ollama non
+    risponde: in quel caso l'errore emergera' alla chiamata, ma non blocchiamo
+    a torto.
+    """
+    installati = modelli_disponibili()
+    if not installati:
+        return []
+    def norm(m):
+        return m if ":" in m else m + ":latest"
+    presenti = {norm(m) for m in installati}
+    richiesti = {norm(m) for m in scelti.values() if m}
+    return sorted(m for m in richiesti if m not in presenti)
 
 
 def log_server(righe: int = 60) -> tuple[str, str]:

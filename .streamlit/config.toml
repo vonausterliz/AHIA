@@ -3,7 +3,15 @@
 [theme]
 # Tema chiaro come predefinito. L'utente puo' comunque passare a quello scuro
 # dal menu in alto a destra: la sua scelta ha la precedenza su questa.
+# Palette sobria da strumento clinico: un blu-verde attenuato come colore
+# guida, superfici chiare, testo ad alto contrasto. Niente colori vivaci:
+# un'app che tratta referti deve trasmettere calma e ordine.
 base = "light"
+primaryColor = "#2f6d6a"
+backgroundColor = "#fbfcfc"
+secondaryBackgroundColor = "#f1f5f5"
+textColor = "#1c2b2b"
+font = "sans serif"
 
 [client]
 # Nasconde i link "Ask Google" / "Ask ChatGPT" nei riquadri di errore:

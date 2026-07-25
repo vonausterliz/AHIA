@@ -10,7 +10,7 @@ abilitati vedono gli stessi referti.
 """
 
 # AHIA — archivio e lettura dei referti medici, in locale.
-# Copyright (C) 2026  {AUTORE}
+# Copyright (C) 2026  vonausterliz
 #
 # Questo programma e' software libero: puoi ridistribuirlo e/o modificarlo
 # secondo i termini della GNU Affero General Public License, versione 3, come
@@ -27,6 +27,7 @@ import datetime as dt
 import hashlib
 import hmac
 import os
+import pathlib
 import re
 import secrets
 import sqlite3
@@ -86,6 +87,83 @@ def elimina_archivio(utente_id: int) -> bool:
         shutil.rmtree(cartella, ignore_errors=True)
         return True
     return False
+
+
+def esporta_archivio(utente_id: int) -> bytes | None:
+    """Impacchetta l'intero archivio di un utente in uno zip, in memoria.
+
+    Contiene i file cosi' come stanno su disco — salute.db, i PDF, i JSON del
+    dizionario e dei riferimenti — quindi lo zip e' gia' un formato
+    reimportabile: nella nuova istanza si scompatta nella cartella dell'utente e
+    l'app lo ritrova identico. None se l'archivio non esiste.
+    """
+    import io
+    import zipfile
+
+    from config import Archivio
+
+    cartella = Archivio(utente_id).dir
+    if not cartella.exists():
+        return None
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
+        for percorso in sorted(cartella.rglob("*")):
+            if percorso.is_file():
+                z.write(percorso, percorso.relative_to(cartella).as_posix())
+    return buffer.getvalue()
+
+
+def importa_archivio(utente_id: int, dati_zip: bytes,
+                     sovrascrivi: bool = False) -> tuple[bool, str]:
+    """Ripristina un archivio da uno zip prodotto da esporta_archivio.
+
+    Rifiuta se l'utente ha gia' un archivio non vuoto, salvo sovrascrivi=True.
+    Estrae solo i percorsi previsti, per non far uscire file dalla cartella.
+    """
+    import io
+    import zipfile
+
+    from config import Archivio
+
+    archivio = Archivio(utente_id)
+    if archivio.db.exists() and not sovrascrivi:
+        return False, "L'utente ha gia' un archivio. Serve conferma per sostituirlo."
+
+    consentiti = {"salute.db", "alias_analiti.json", "riferimenti_personali.json"}
+    LIMITE_FILE = 200 * 1024 * 1024   # 200 MB per file: oltre e' quasi certo abuso
+    LIMITE_TOTALE = 500 * 1024 * 1024
+    try:
+        with zipfile.ZipFile(io.BytesIO(dati_zip)) as z:
+            info = z.infolist()
+            nomi = [i.filename for i in info]
+            if "salute.db" not in nomi:
+                return False, "Lo zip non sembra un archivio AHIA: manca salute.db."
+            totale = 0
+            for i in info:
+                nome = i.filename
+                # backslash normalizzato: su alcuni sistemi separa i percorsi
+                parti = pathlib.PurePosixPath(nome.replace("\\", "/")).parts
+                if nome.startswith("/") or ".." in parti:
+                    return False, f"Percorso non sicuro nello zip: {nome}"
+                # symlink e altri tipi non regolari: rifiutati
+                if (i.external_attr >> 16) & 0o170000 not in (0, 0o100000, 0o040000):
+                    return False, f"Voce non consentita nello zip: {nome}"
+                if i.file_size > LIMITE_FILE:
+                    return False, f"File troppo grande nello zip: {nome}"
+                totale += i.file_size
+            if totale > LIMITE_TOTALE:
+                return False, "Archivio troppo grande: possibile file corrotto."
+            if sovrascrivi and archivio.dir.exists():
+                import shutil
+                shutil.rmtree(archivio.dir, ignore_errors=True)
+            archivio.pdf.mkdir(parents=True, exist_ok=True)
+            for nome in nomi:
+                base = nome.split("/", 1)[0]
+                if base in consentiti or nome.startswith("referti/"):
+                    z.extract(nome, archivio.dir)
+    except zipfile.BadZipFile:
+        return False, "Il file non e' uno zip valido."
+    return True, "Archivio importato."
 
 
 def migra_archivio_singolo(utente_id: int) -> bool:

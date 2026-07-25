@@ -1,7 +1,7 @@
 """AHIA — configurazione: percorsi, funzioni LLM, conversioni, dizionario."""
 
 # AHIA — archivio e lettura dei referti medici, in locale.
-# Copyright (C) 2026  {AUTORE}
+# Copyright (C) 2026  vonausterliz
 #
 # Questo programma e' software libero: puoi ridistribuirlo e/o modificarlo
 # secondo i termini della GNU Affero General Public License, versione 3, come
@@ -17,12 +17,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-VERSIONE = "1.5.2"
+VERSIONE = "1.13.0"
 
 # AGPL-3.0, articolo 13: chi interagisce con il programma attraverso una rete
 # deve poter ottenere il sorgente. Se pubblichi una tua versione modificata,
 # aggiorna questo indirizzo.
-REPO_URL = "https://github.com/<utente>/ahia"
+REPO_URL = "https://github.com/vonausterliz/AHIA"
 
 # --- Percorsi: tutto resta in locale ---------------------------------------
 
@@ -96,6 +96,15 @@ TIMEOUT_PULL = 7200  # un modello da 20 GB su linea lenta
 # mxbai-embed-large (ottimo ma solo inglese, sconsigliato qui).
 
 MODELLO_EMBEDDING = "bge-m3"
+
+# Estrazione difficile: quante volte il modello piccolo ritenta con le istruzioni
+# scoperte dalla diagnosi prima di cedere il compito al modello grosso.
+RITENTATIVI_ESTRAZIONE = 1
+
+# Analisi struttura: sul primo referto di un laboratorio mai visto, il modello
+# grosso studia il layout e prepara una scheda di lettura che il modello piccolo
+# usera' per estrarre. Il costo si paga una volta per laboratorio. Disattivabile.
+ANALISI_STRUTTURA_AUTO = True
 DIM_FRAMMENTO = 800        # caratteri per frammento
 SOVRAPPOSIZIONE = 150      # coda ripetuta tra frammenti contigui
 BRANI_NEL_CONTESTO = 5
@@ -140,6 +149,26 @@ FUNZIONI: dict[str, dict] = {
                  "la macchina regge, anche se lento.",
         "default": "qwen3:14b", "temperature": 0.2, "num_ctx": 16384, "think": True,
     },
+    "analisi_struttura": {
+        "label": "Analisi della struttura del referto",
+        "aiuto": "Sul primo referto di un laboratorio nuovo, studia il layout e "
+                 "prepara una scheda di lettura per il modello di estrazione. "
+                 "Modello capace, in locale.",
+        "default": "qwen3:14b", "temperature": 0.1, "num_ctx": 32768, "think": True,
+    },
+    "diagnosi_estrazione": {
+        "label": "Diagnosi delle estrazioni difficili",
+        "aiuto": "Analizza un referto estratto male e capisce perche'. Va usato "
+                 "il modello piu' capace disponibile: qwen3:32b se la macchina "
+                 "lo regge, altrimenti qwen3:14b.",
+        "default": "qwen3:14b", "temperature": 0.2, "num_ctx": 32768, "think": True,
+    },
+    "estrazione_accurata": {
+        "label": "Estrazione con il modello grosso",
+        "aiuto": "Rifa' l'estrazione quando quella normale ha fallito piu' volte. "
+                 "Modello capace, tutto in locale.",
+        "default": "qwen3:14b", "temperature": 0.0, "num_ctx": 32768, "think": True,
+    },
     "classificazione": {
         "label": "Classificazione documenti",
         "aiuto": "Riconosce di che tipo di documento si tratta leggendo la prima "
@@ -162,7 +191,7 @@ FUNZIONI: dict[str, dict] = {
 # --- Avvertenza mostrata al primo avvio -------------------------------------
 # Alzando la versione l'avvertenza viene ripresentata a chi l'aveva accettata.
 
-DISCLAIMER_VERSIONE = "2"
+DISCLAIMER_VERSIONE = "3"
 
 DISCLAIMER = {"it": """
 ### AHIA è uno strumento sperimentale
@@ -190,9 +219,16 @@ preoccupa, se hai sintomi o se stai valutando decisioni che riguardano la tua
 salute, parlane con il tuo medico. In caso di urgenza, chiama il 112.
 
 **Responsabilità.** Il software è fornito così com'è, senza garanzie di alcun
-tipo, espresse o implicite. Chi lo ha realizzato declina ogni responsabilità
-per l'uso che ne viene fatto e per qualsiasi conseguenza derivante dalle
-informazioni prodotte. L'utilizzo avviene a rischio esclusivo di chi lo usa.
+tipo, espresse o implicite. AHIA è progettata perché nulla lasci il tuo computer
+senza un tuo gesto esplicito, e perché il testo del secondo parere sia
+anonimizzato, ma **questo non può essere garantito a priori**: un bug
+dell'applicazione, di una libreria di terze parti o di un servizio esterno, un
+errore di anonimizzazione o un uso improprio possono far sì che dati personali
+escano dal tuo computer o vengano condivisi con terze parti. Chi ha realizzato
+AHIA **non si assume alcuna responsabilità** per dati personali condivisi con
+terze parti, per malfunzionamenti o bug propri o di componenti di terze parti,
+né per un utilizzo errato dell'applicazione. L'utilizzo avviene a rischio
+esclusivo di chi lo usa.
 
 **I tuoi dati.** Restano su questa macchina, in una cartella non cifrata, e non
 vengono inviati ad alcun servizio esterno. La riservatezza dell'archivio
@@ -201,8 +237,10 @@ dipende da come proteggi il computer su cui gira.
 **Secondo parere.** L'app può preparare un testo anonimizzato da sottoporre a
 un modello esterno. Quel testo non parte da solo: viene mostrato per intero e
 sei tu a copiarlo altrove. Da quel momento vale l'informativa del servizio che
-scegli, non questa. Rileggilo prima di inviarlo: ciò che esce da qui non torna
-indietro.
+scegli, non questa. Rileggilo sempre prima di inviarlo e valuta tu se è privo di
+dati che non vuoi condividere: ciò che esce da qui non torna indietro.
+L'integrazione diretta con i modelli di frontiera tramite chiave API non è
+testata.
 """, "en": """
 ### AHIA is an experimental tool
 
@@ -228,8 +266,14 @@ symptoms, or if you are weighing decisions about your health, talk to your
 doctor. In an emergency, call your local emergency number.
 
 **Liability.** The software is provided as is, without warranty of any kind,
-express or implied. Its author disclaims all liability for how it is used and
-for any consequence arising from the information it produces. You use it
+express or implied. AHIA is designed so that nothing leaves your computer
+without an explicit action on your part, and so that the second-opinion text is
+anonymised, but **this cannot be guaranteed in advance**: a bug in the
+application, in a third-party library, or in an external service, an
+anonymisation error, or improper use may cause personal data to leave your
+computer or be shared with third parties. Its author accepts **no liability**
+for personal data shared with third parties, for malfunctions or bugs of its own
+or of third-party components, or for improper use of the application. You use it
 entirely at your own risk.
 
 **Your data.** It stays on this machine, in an unencrypted folder, and is sent
@@ -239,8 +283,10 @@ you protect the computer it runs on.
 **Second opinion.** The app can prepare an anonymised text to submit to an
 external model. That text is never sent automatically: it is shown to you in
 full and you are the one who copies it elsewhere. From that point the privacy
-policy of the service you choose applies, not this one. Read it before sending:
-what leaves here does not come back.
+policy of the service you choose applies, not this one. Always read it before
+sending and judge for yourself whether it is free of data you do not want to
+share: what leaves here does not come back. The direct integration with frontier
+models via API key is untested.
 """}
 
 # --- Tipologie di documento -------------------------------------------------
