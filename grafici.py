@@ -120,8 +120,28 @@ def _asse_tempo(d: pd.DataFrame, titolo=None) -> alt.X:
                  scale=alt.Scale(nice=False, padding=18), axis=asse)
 
 
+def _margine_asse(d: pd.DataFrame) -> tuple[float, float]:
+    """Estremi verticali del grafico: minimo e massimo tra valori e intervalli,
+    con un piccolo margine, così le fasce fuori norma arrivano fino ai bordi."""
+    import pandas as _pd
+    serie = _pd.concat([d["valore"], d["range_min"], d["range_max"]]).dropna()
+    if serie.empty:
+        return (0.0, 1.0)
+    lo, hi = float(serie.min()), float(serie.max())
+    if lo == hi:
+        return (lo - 1, hi + 1)
+    m = (hi - lo) * 0.08
+    return (lo - m, hi + m)
+
+
 def grafico_analita(df: pd.DataFrame, analita: str, altezza: int = 260):
-    """Serie di un singolo analita con banda di riferimento e punti per stato."""
+    """Serie di un singolo analita: fasce fuori norma in rosso, banda normale.
+
+    Le zone fuori dall'intervallo di riferimento sono colorate di rosso chiaro
+    (sopra il massimo e sotto il minimo), così si vede a colpo d'occhio quando un
+    punto cade fuori norma senza dover leggere i numeri. La banda normale resta
+    tenue sullo sfondo.
+    """
     d = df[df["analita"] == analita].sort_values("data")
     unita = d["unita"].iloc[-1] if not d.empty else ""
     titolo = f"{analita} ({unita})" if unita else analita
@@ -129,12 +149,27 @@ def grafico_analita(df: pd.DataFrame, analita: str, altezza: int = 260):
     # dal catalogo: la differenza deve saltare all'occhio senza leggere note
     da_catalogo = (d["origine_range"] == "catalogo").any()
     colore_banda = "#5c6bc0" if da_catalogo else "#2e7d32"
-    y = alt.Y("valore:Q", title=titolo, scale=alt.Scale(zero=False))
+    dominio = _margine_asse(d)
+    y = alt.Y("valore:Q", title=titolo,
+              scale=alt.Scale(zero=False, domain=list(dominio)))
 
     strati = []
     banda = d.dropna(subset=["range_min", "range_max"])
     if not banda.empty:
-        strati.append(alt.Chart(banda).mark_area(opacity=0.14,
+        # fasce fuori norma in rosso chiaro: dal massimo verso l'alto e dal
+        # minimo verso il basso, fino ai bordi del grafico.
+        fuori = banda.assign(alto=dominio[1], basso=dominio[0])
+        rosso = "#e53935"
+        strati.append(alt.Chart(fuori).mark_area(opacity=0.12,
+                                                 color=rosso).encode(
+            x=_asse_tempo(d), y=alt.Y("range_max:Q", title=titolo),
+            y2="alto:Q"))
+        strati.append(alt.Chart(fuori).mark_area(opacity=0.12,
+                                                 color=rosso).encode(
+            x=_asse_tempo(d), y=alt.Y("range_min:Q", title=titolo),
+            y2="basso:Q"))
+        # banda normale, tenue, sopra le fasce rosse
+        strati.append(alt.Chart(banda).mark_area(opacity=0.16,
                                                  color=colore_banda).encode(
             x=_asse_tempo(d), y=alt.Y("range_min:Q", title=titolo),
             y2="range_max:Q"))

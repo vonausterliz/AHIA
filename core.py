@@ -428,6 +428,85 @@ def documenti_narrativi(conn, quanti: int = 6) -> list[sqlite3.Row]:
            ORDER BY data_documento DESC LIMIT ?""", (quanti,)).fetchall()
 
 
+def documenti_di_tipo(conn, tipo: str) -> list[sqlite3.Row]:
+    """Tutti i documenti di un tipo, cronologici, con sintesi e testo completo.
+
+    Serve alla scheda dei referti descrittivi: raccoglie per una categoria
+    (oculistica, ecografia…) tutto ciò che serve a mostrarli e a farci ragionare
+    il modello, in un'unica query.
+    """
+    return conn.execute(
+        """SELECT d.sha256, d.tipo, d.data_documento, d.titolo, d.struttura,
+                  d.sintesi, d.conclusioni, f.nome_file, f.origine,
+                  t.testo
+           FROM documenti d
+           JOIN file_processati f ON f.sha256 = d.sha256
+           LEFT JOIN testi t ON t.sha256 = d.sha256
+           WHERE d.tipo = ?
+           ORDER BY d.data_documento DESC, f.ingerito_il DESC""",
+        (tipo,)).fetchall()
+
+
+def documenti_di_tipo_qualunque(conn) -> list[sqlite3.Row]:
+    """Tutti i documenti dell'archivio, con sintesi e testo, più recenti prima."""
+    return conn.execute(
+        """SELECT d.sha256, d.tipo, d.data_documento, d.titolo, d.struttura,
+                  d.sintesi, d.conclusioni, f.nome_file, f.origine,
+                  t.testo
+           FROM documenti d
+           JOIN file_processati f ON f.sha256 = d.sha256
+           LEFT JOIN testi t ON t.sha256 = d.sha256
+           ORDER BY d.data_documento DESC, f.ingerito_il DESC""").fetchall()
+
+
+def contesto_referto(conn, sha: str, max_caratteri: int = 12000) -> str:
+    """Testo di un singolo referto, pronto per il modello."""
+    r = conn.execute(
+        """SELECT d.tipo, d.data_documento, d.struttura, d.sintesi, d.conclusioni,
+                  t.testo
+           FROM documenti d LEFT JOIN testi t ON t.sha256 = d.sha256
+           WHERE d.sha256 = ?""", (sha,)).fetchone()
+    if not r:
+        return ""
+    from config import TIPI
+    data = normalizza_data(r["data_documento"]) or "data ignota"
+    etichetta_t = TIPI.get(r["tipo"], {}).get("label", "Referto")
+    testa = f"— {etichetta_t} del {data}"
+    if r["struttura"]:
+        testa += f" · {r['struttura']}"
+    corpo = (r["testo"] or r["sintesi"] or "").strip()
+    if len(corpo) > max_caratteri:
+        corpo = corpo[:max_caratteri] + " […]"
+    return f"{testa}\n{corpo}"
+
+
+def contesto_categoria(conn, tipo: str, max_caratteri: int = 12000) -> str:
+    """Testo dei referti di una categoria, pronto per il modello.
+
+    Mette in fila i referti in ordine cronologico con data, struttura e
+    contenuto, così il modello può ragionare sull'evoluzione di quella sola
+    categoria senza mescolarla con gli esami del sangue o con altre visite. Il
+    testo di ogni referto è troncato se molto lungo, per non sforare il contesto.
+    """
+    righe = documenti_di_tipo(conn, tipo)
+    if not righe:
+        return ""
+    per_referto = max(1500, max_caratteri // max(1, len(righe)))
+    blocchi = []
+    for r in righe:
+        data = normalizza_data(r["data_documento"]) or "data ignota"
+        intest = f"— Referto del {data}"
+        if r["struttura"]:
+            intest += f" · {r['struttura']}"
+        corpo = (r["testo"] or "").strip()
+        if not corpo:
+            corpo = (r["sintesi"] or "").strip()
+        if len(corpo) > per_referto:
+            corpo = corpo[:per_referto] + " […]"
+        blocchi.append(f"{intest}\n{corpo}")
+    return "\n\n".join(blocchi)
+
+
 def salva_testo(conn, sha: str, testo: str) -> None:
     """Conserva il testo estratto: e' la base di ricerca e indicizzazione.
 
@@ -768,8 +847,8 @@ def _tabella_statistiche(stat: dict[str, dict]) -> str:
 def elenco_documenti(conn) -> list[sqlite3.Row]:
     """Documenti selezionabili come ambito di analisi, piu' recenti prima."""
     return conn.execute(
-        """SELECT d.sha256, d.tipo, d.data_documento, d.titolo, f.nome_file,
-                  COALESCE(c.n, 0) AS n_esami
+        """SELECT d.sha256, d.tipo, d.data_documento, d.titolo, d.struttura,
+                  f.nome_file, COALESCE(c.n, 0) AS n_esami
            FROM documenti d
            JOIN file_processati f ON f.sha256 = d.sha256
            LEFT JOIN (SELECT sha256, COUNT(*) AS n FROM risultati

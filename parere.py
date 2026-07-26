@@ -61,15 +61,34 @@ def _scaletta_tempi(date: list[str]) -> dict[str, str]:
 
 def quadro_anonimo(conn: sqlite3.Connection, n_referti: int, *,
                    eta: str = "fascia", includi_bmi: bool = True,
-                   includi_note: bool = False) -> str:
+                   includi_note: bool = False,
+                   tipi: list[str] | None = None,
+                   sha_singolo: str | None = None) -> str:
     """Tabella degli esami senza dati identificativi.
 
     Escluso sempre: nome, laboratorio, nomi dei file, date assolute.
     Le date diventano intervalli relativi al primo prelievo incluso.
+
+    Ambito selezionabile:
+    - `sha_singolo`: solo i valori di quel referto;
+    - `tipi`: solo i prelievi dei referti di quei tipi;
+    - altrimenti: gli ultimi `n_referti` prelievi, come prima.
     """
-    date = [r[0] for r in conn.execute(
-        "SELECT DISTINCT data_prelievo FROM risultati "
-        "ORDER BY data_prelievo DESC LIMIT ?", (n_referti,))]
+    if sha_singolo:
+        date = [r[0] for r in conn.execute(
+            "SELECT DISTINCT data_prelievo FROM risultati WHERE sha256 = ? "
+            "ORDER BY data_prelievo DESC", (sha_singolo,))]
+    elif tipi:
+        segna = ",".join("?" * len(tipi))
+        date = [r[0] for r in conn.execute(
+            f"""SELECT DISTINCT r.data_prelievo FROM risultati r
+                JOIN documenti d ON d.sha256 = r.sha256
+                WHERE d.tipo IN ({segna})
+                ORDER BY r.data_prelievo DESC""", tipi)]
+    else:
+        date = [r[0] for r in conn.execute(
+            "SELECT DISTINCT data_prelievo FROM risultati "
+            "ORDER BY data_prelievo DESC LIMIT ?", (n_referti,))]
     if not date:
         return ""
     scala = _scaletta_tempi(date)
@@ -119,6 +138,48 @@ def quadro_anonimo(conn: sqlite3.Connection, n_referti: int, *,
     return ("**Soggetto**\n" + "\n".join(righe_profilo)
             + f"\n\n**Esami** ({intervallo}, l'ultimo indicato per primo nei valori)\n\n"
             + "\n".join(tabella))
+
+
+def quadro_descrittivi(conn: sqlite3.Connection, *,
+                       tipi: list[str] | None = None,
+                       sha_singolo: str | None = None) -> str:
+    """Testo anonimizzato dei referti descrittivi selezionati.
+
+    Ogni referto passa da oscura_testo, che toglie i dati identificativi
+    strutturati. Le date assolute diventano l'anno soltanto, per non fissare il
+    momento pur mantenendo l'ordine. Struttura e laboratorio sono esclusi.
+    """
+    if sha_singolo:
+        righe = conn.execute(
+            """SELECT d.tipo, d.data_documento, t.testo, d.sintesi
+               FROM documenti d LEFT JOIN testi t ON t.sha256 = d.sha256
+               WHERE d.sha256 = ?""", (sha_singolo,)).fetchall()
+    elif tipi:
+        segna = ",".join("?" * len(tipi))
+        righe = conn.execute(
+            f"""SELECT d.tipo, d.data_documento, t.testo, d.sintesi
+                FROM documenti d LEFT JOIN testi t ON t.sha256 = d.sha256
+                WHERE d.tipo IN ({segna})
+                ORDER BY d.data_documento DESC""", tipi).fetchall()
+    else:
+        return ""
+    if not righe:
+        return ""
+
+    p = core.leggi_profilo(conn)
+    from config import TIPI
+    blocchi = []
+    for r in righe:
+        anno = (r["data_documento"] or "")[:4] or "anno ignoto"
+        etichetta = TIPI.get(r["tipo"], {}).get("label", "Referto")
+        corpo = (r["testo"] or r["sintesi"] or "").strip()
+        if not corpo:
+            continue
+        corpo = oscura_testo(corpo, p)
+        blocchi.append(f"— {etichetta} ({anno})\n{corpo}")
+    if not blocchi:
+        return ""
+    return "**Referti descrittivi** (anonimizzati)\n\n" + "\n\n".join(blocchi)
 
 
 # --- Costruzione del quesito -----------------------------------------------
@@ -218,7 +279,111 @@ _CONTROLLI = [
     (re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"), "una data in chiaro"),
     (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), "una data in chiaro"),
     (re.compile(r"\b(?:via|viale|piazza|corso)\s+\w+", re.I), "un indirizzo"),
+    (re.compile(r"\b\d{10,}\b"), "un identificativo numerico lungo"),
+    (re.compile(r"\b[A-Z]{1,3}\d{5,}\b"), "un codice alfanumerico"),
+    (re.compile(r"\b(?:referto|prot|accettazione|pratica|cartella|nosologic|"
+                r"episodio|prestazion)\w*\.?\s*[:n°.\\/i]*\s*[A-Z]{0,3}\d", re.I),
+     "un numero di referto o episodio"),
 ]
+
+# Sostituzioni attive per i testi liberi dei referti descrittivi: dove la tabella
+# dei valori è già anonima per costruzione, il testo di una visita può contenere
+# dati identificativi. Qui li oscuriamo prima di comporre il quesito.
+_OSCURA = [
+    (re.compile(r"\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b"), "[codice fiscale]"),
+    (re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+"), "[email]"),
+    (re.compile(r"(?<!\d)(?:\+39\s?)?3\d{2}[\s.-]?\d{6,7}(?!\d)"), "[telefono]"),
+    (re.compile(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b"), "[data]"),
+    (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), "[data]"),
+    (re.compile(r"\b(?:via|viale|piazza|corso|largo|vicolo)\s+[\w' ]+?\d*\b",
+                re.I), "[indirizzo]"),
+    # numeri di referto, pratica, accettazione, cartella, nosologico, episodio
+    (re.compile(r"\b(?:referto|refert[oi]|nr|n[°.]?|prot(?:ocollo)?|"
+                r"accettazione|acc|pratica|cartella|nosologic[oa]|id|codice|"
+                r"episodio|prestazion[ei]|ricovero|impegnativa)\.?\s*"
+                r"[:n°.\\/i]*\s*[A-Z]{0,3}\d[\w/./-]*", re.I),
+     "[numero di referto]"),
+    # codice alfanumerico lungo (1-3 lettere + 5+ cifre): es. EP2300018443
+    (re.compile(r"\b[A-Z]{1,3}\d{5,}\b"), "[identificativo]"),
+    # tessera sanitaria / codice a barre lungo (10+ cifre consecutive)
+    (re.compile(r"\b\d{10,}\b"), "[identificativo]"),
+    # date scritte a parole: 15 giugno 2024
+    (re.compile(r"\b\d{1,2}\s+(?:gennaio|febbraio|marzo|aprile|maggio|giugno|"
+                r"luglio|agosto|settembre|ottobre|novembre|dicembre)\s+\d{4}\b",
+                re.I), "[data]"),
+    # nomi di struttura sanitaria: la riga con la parola-chiave viene oscurata
+    (re.compile(r"\b(?:poliambulatorio|ambulatorio|ospedale|ospedaliera?|"
+                r"clinica|casa\s+di\s+cura|presidio|policlinico|istituto|"
+                r"fondazione|A\.?S\.?S\.?T\.?|A\.?S\.?L\.?|A\.?O\.?|IRCCS|"
+                r"centro\s+medico|laboratorio\s+analisi|studio\s+medico)"
+                r"[^\n]*", re.I), "[struttura sanitaria]"),
+    # valore dopo un'etichetta anagrafica: "Cognome: ROSSI", "Nome: Mario".
+    # Richiede i due punti per non catturare intestazioni come "DATI ASSISTITO".
+    (re.compile(r"\b(cognome|nome|paziente|assistito|paz\.?)\s*:\s*"
+                r"[A-ZÀ-Ù][\wà-ù']+(?:\s+[A-ZÀ-Ù][\wà-ù']+){0,2}", re.I),
+     r"\1: [nome]"),
+    (re.compile(r"\b(nat[oa]\s+(?:il\s+\[data\]\s+)?a|luogo\s+di\s+nascita|"
+                r"residente\s+(?:a|in)|domiciliat[oa]\s+(?:a|in)|comune)\s*:?\s*"
+                r"[A-ZÀ-Ù][\wà-ù' ]+?(?=\s+in\b|\s*$|\s*\n|,)", re.I | re.M),
+     r"\1 [luogo]"),
+    # nome isolato in maiuscolo seguito da un codice numerico: "BRUNO 445566"
+    (re.compile(r"^\s*[A-ZÀ-Ù][A-ZÀ-Ù']{2,}(?:\s+[A-ZÀ-Ù']+){0,2}\s+\d{3,}\s*$",
+                re.M), "[nome] [identificativo]"),
+    # medico firmatario: "FIRMATO DA Rossi Dott.ssa Anna", "a cura del Dr. Bianchi".
+    # Gli spazi interni sono [ \t] (non \s) per non attraversare i ritorni a capo
+    # e sconfinare sulla riga successiva, che può contenere dati clinici.
+    (re.compile(r"\b(firmato[ \t]+da|refertato[ \t]+da|a[ \t]+cura[ \t]+d[ei]l?|"
+                r"dott(?:\.ssa|oressa|ore|\.)?|dr(?:\.ssa|\.)?|prof(?:\.ssa|\.)?)"
+                r"[ \t]*:?[ \t]*[A-ZÀ-Ù][\wà-ù'.]+"
+                r"(?:[ \t]+(?:dott\.ssa|dott\.|dr\.|[A-ZÀ-Ù][\wà-ù'.]+)){0,3}",
+                re.I), "[medico]"),
+    # numero R.E.A. e simili sigle camerali: "R.E.A.: MI-1040877"
+    (re.compile(r"\bR\.?E\.?A\.?\s*:?\s*[A-Z]{0,2}[-\s]?\d{4,}", re.I),
+     "[numero REA]"),
+    # sito web / URL
+    (re.compile(r"\b(?:https?://)?(?:www\.)[\w.-]+\.[a-z]{2,}(?:/\S*)?", re.I),
+     "[sito web]"),
+    (re.compile(r"\[?(?:https?://)[\w.-]+\.[a-z]{2,}[^\s\])]*\]?", re.I),
+     "[sito web]"),
+    # telefono/fax fisso italiano: "02. 8350.0010", "+39 02 8350 0010"
+    (re.compile(r"(?:tel|fax|telefono)\.?\s*:?\s*(?:\+39\s?)?0\d[\d.\s/-]{5,}",
+                re.I), "[telefono]"),
+]
+
+# Titoli e cortesie che precedono un cognome: aiutano a beccare il nome anche
+# quando nel referto compare in forma diversa dal profilo.
+_TITOLI = re.compile(
+    r"\b(?:sig\.?(?:ra)?|signor[ae]?|gent\.?(?:mo|ma)?|egr\.?|"
+    r"paziente|assistito|nato\s+a|nata\s+a)\b[:\s]*"
+    r"([A-Z][a-zà-ù']+(?:\s+[A-Z][a-zà-ù']+){0,2})", re.I)
+
+
+def oscura_testo(testo: str, profilo: dict | None = None) -> str:
+    """Sostituisce nel testo libero i dati identificativi riconoscibili.
+
+    Non è garanzia assoluta — un nome di medico o una struttura scritti in chiaro
+    possono sfuggire — ma toglie di mezzo i pattern strutturati (codici fiscali,
+    email, telefoni, date, indirizzi, numeri di referto) e il nome del profilo,
+    incluse le singole parti (solo il cognome, ordine invertito). La verifica
+    finale resta a valle come ultima rete.
+    """
+    for schema, rimpiazzo in _OSCURA:
+        testo = schema.sub(rimpiazzo, testo)
+
+    # Nome del profilo: prima la stringa intera, poi ogni parola lunga (>=3),
+    # così "Rossi" da solo o "ROSSI MARIO" invertito vengono comunque oscurati.
+    if profilo:
+        nome = (profilo.get("nome") or "").strip()
+        if len(nome) > 2:
+            testo = re.sub(rf"\b{re.escape(nome)}\b", "[nome]", testo, flags=re.I)
+            for parte in nome.split():
+                if len(parte) >= 3:
+                    testo = re.sub(rf"\b{re.escape(parte)}\b", "[nome]",
+                                   testo, flags=re.I)
+
+    # Cognome dopo un titolo di cortesia, anche se non è nel profilo
+    testo = _TITOLI.sub(lambda m: m.group(0).replace(m.group(1), "[nome]"), testo)
+    return testo
 
 
 def verifica(testo: str, profilo: dict) -> list[str]:

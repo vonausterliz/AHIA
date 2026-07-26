@@ -153,15 +153,43 @@ def _chiama(model: str, funzione: str, contenuto: str,
 
 
 def _pagine_testo(path: Path, progress=None) -> str | None:
-    """Testo del PDF, oppure None se e' una scansione."""
+    """Testo del PDF, oppure None se e' una scansione.
+
+    Prova due strategie e tiene la migliore. `layout=True` preserva le colonne
+    (utile per le tabelle di valori) ma su certi PDF — firme digitali, layout
+    complessi — mescola le lettere producendo testo illeggibile. Il testo lineare
+    è più robusto su quei casi. Si sceglie quello con meno "rumore" (sequenze di
+    lettere improbabili), a parità di lunghezza utile.
+    """
     import pdfplumber
 
     with pdfplumber.open(path) as pdf:
         if progress:
             progress(f"{len(pdf.pages)} pagine da leggere")
-        pagine = [p.extract_text(layout=True) or "" for p in pdf.pages]
+        con_layout, lineare = [], []
+        for p in pdf.pages:
+            con_layout.append(p.extract_text(layout=True) or "")
+            lineare.append(p.extract_text() or "")
+
+    t_layout = "\n\n--- pagina ---\n\n".join(con_layout)
+    t_lineare = "\n\n--- pagina ---\n\n".join(lineare)
+
+    # "rumore": frazione di parole con 4+ consonanti consecutive, segnale
+    # affidabile di testo mescolato da layout=True (es. "firmatoP deigrit"),
+    # senza falsi positivi sui termini clinici o sui nomi propri.
+    def rumore(t: str) -> float:
+        import re as _re
+        token = _re.findall(r"[A-Za-zÀ-ù]{2,}", t)
+        if not token:
+            return 1.0
+        strani = sum(1 for w in token
+                     if _re.search(r"[bcdfghjklmnpqrstvwxyz]{4,}", w, _re.I))
+        return strani / len(token)
+
+    scelto = t_lineare if rumore(t_lineare) < rumore(t_layout) else t_layout
+    pagine = scelto.split("\n\n--- pagina ---\n\n")
     utile = sum(len(p.strip()) for p in pagine) >= MIN_CHARS_PAGINA * max(1, len(pagine))
-    return "\n\n--- pagina ---\n\n".join(pagine) if utile else None
+    return scelto if utile else None
 
 
 def _pagine_immagini(path: Path) -> list[str]:
@@ -671,6 +699,58 @@ def diagnostica(model: str, testo_grezzo: str, esami_estratti: list[dict]) -> di
         testo = json.loads(resp.read().decode())["message"]["content"]
     return json.loads(re.sub(r"^```(?:json)?|```$", "", testo.strip(),
                              flags=re.MULTILINE).strip())
+
+
+def riestrai_referto(conn, sha: str, archivio, modelli: dict,
+                     progress=None) -> dict:
+    """Ri-elabora un referto già in archivio, dal suo PDF originale.
+
+    Ritrova il file salvato, lo ripassa per l'estrazione con i modelli attuali e
+    aggiorna il testo e i dati nel database. Serve quando l'estrazione è
+    migliorata da quando il referto fu caricato: rigenera il testo senza doverlo
+    ricaricare a mano. Restituisce il documento rielaborato.
+
+    Solleva FileNotFoundError se il PDF originale non è più sul disco.
+    """
+
+    riga = conn.execute(
+        "SELECT nome_file, origine FROM file_processati WHERE sha256 = ?",
+        (sha,)).fetchone()
+    if not riga:
+        raise FileNotFoundError("Referto non trovato in archivio.")
+
+    percorso = archivio.pdf / f"{sha[:12]}_{core.nome_file_sicuro(riga['nome_file'])}"
+    if not percorso.exists():
+        # fallback: cerca un file che inizia con lo sha abbreviato
+        candidati = list(archivio.pdf.glob(f"{sha[:12]}_*"))
+        if not candidati:
+            raise FileNotFoundError(
+                f"Il PDF originale di questo referto non è più sul disco "
+                f"({archivio.pdf}). Ricaricalo per rielaborarlo.")
+        percorso = candidati[0]
+
+    if progress:
+        progress(f"Rielaborazione di {percorso.name}…")
+
+    # tipo già assegnato: lo rispettiamo, così la ri-estrazione non riclassifica
+    tipo_att = conn.execute(
+        "SELECT tipo FROM documenti WHERE sha256 = ?", (sha,)).fetchone()
+    tipo_forzato = tipo_att["tipo"] if tipo_att else None
+
+    doc = elabora_documento(percorso, modelli, tipo_forzato=tipo_forzato,
+                            progress=progress)
+
+    # aggiorna testo e dati; i valori numerici si riscrivono se presenti
+    core.salva_documento(conn, sha, doc)
+    if doc.get("testo"):
+        core.salva_testo(conn, sha, doc["testo"])
+    if doc.get("esami"):
+        core.salva_referto(conn, sha, riga["nome_file"], riga["origine"],
+                           {"data_prelievo": doc.get("data_documento"),
+                            "laboratorio": doc.get("struttura", "")},
+                           doc["esami"])
+    conn.commit()
+    return doc
 
 
 def riestrai(model: str, funzione: str, testo: str,

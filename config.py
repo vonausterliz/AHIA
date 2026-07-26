@@ -17,7 +17,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-VERSIONE = "1.13.0"
+# Cartella dove risiede il codice dell'app: accanto ci sono i file distribuiti
+# insieme, come MANUALE.md.
+DIR_APP = Path(__file__).resolve().parent
+
+VERSIONE = "1.18.1"
 
 # AGPL-3.0, articolo 13: chi interagisce con il programma attraverso una rete
 # deve poter ottenere il sorgente. Se pubblichi una tua versione modificata,

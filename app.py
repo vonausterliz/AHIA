@@ -23,7 +23,6 @@ import time
 
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 
 import config
 import core
@@ -555,15 +554,17 @@ with st.sidebar:
 etichette_schede = [
     ":material/badge: Profilo",
     ":material/lab_panel: Referti",
-    ":material/trending_up: Andamenti",
+    ":material/trending_up: Andamento analiti",
     ":material/insights: Analisi",
     ":material/forum: Chat",
     ":material/share: Secondo parere",
     ":material/menu_book: Dizionario",
+    ":material/help: Guida",
 ]
 if e_admin:
     etichette_schede.append(":material/group: Utenti")
 tabs = st.tabs(etichette_schede)
+IDX_GUIDA = 7
 
 # --- Profilo ---------------------------------------------------------------
 
@@ -851,7 +852,7 @@ with tabs[1]:
                     if not tutti:
                         righe = righe[:LIMITE]
                 for d in righe:
-                    c1, c2, c3 = st.columns([3, 2, 1])
+                    c1, c2, c3, c4 = st.columns([3, 2, 1, 1])
                     testa = d["data_documento"] or "senza data"
                     c1.markdown(f"**{testa}** — {d['titolo'] or d['nome_file']}")
                     dettagli = []
@@ -869,7 +870,29 @@ with tabs[1]:
                     if nuovo_tipo != tipo:
                         core.cambia_tipo(conn, d["sha256"], nuovo_tipo)
                         st.rerun()
-                    if c3.button("Elimina", key=f"del_{d['sha256']}",
+                    if c3.button("Ri-estrai", key=f"rex_{d['sha256']}",
+                                 icon=":material/refresh:", width="stretch",
+                                 help="Rielabora il referto dal PDF originale con "
+                                      "i modelli attuali, utile se l'estrazione è "
+                                      "migliorata da quando fu caricato."):
+                        mancanti = core.modelli_mancanti(scelti)
+                        if mancanti:
+                            st.error("Modelli non installati: "
+                                     + ", ".join(f"`{m}`" for m in mancanti))
+                        else:
+                            with st.status("Rielaborazione…", expanded=True) as st_:
+                                try:
+                                    ingest.riestrai_referto(
+                                        conn, d["sha256"], archivio, scelti,
+                                        progress=st.write)
+                                    st_.update(label="Rielaborato",
+                                               state="complete")
+                                    st.rerun()
+                                except FileNotFoundError as e:
+                                    st_.update(label="PDF non disponibile",
+                                               state="error")
+                                    st.error(str(e))
+                    if c4.button("Elimina", key=f"del_{d['sha256']}",
                                  icon=":material/delete:", width="stretch"):
                         core.elimina_referto(conn, d["sha256"])
                         st.rerun()
@@ -969,7 +992,7 @@ with tabs[1]:
 # --- Andamenti -------------------------------------------------------------
 
 with tabs[2]:
-    st.subheader("Andamenti nel tempo")
+    st.subheader("Andamento analiti")
     analiti = core.elenco_analiti(conn)
     if not analiti:
         st.info("Carica almeno un referto per vedere gli andamenti.")
@@ -1056,7 +1079,7 @@ with tabs[2]:
                         st.markdown(f"**{nome_a}** — "
                                     f"[cos'e' questo esame]({riferimenti.scheda(nome_a, alias)})")
                         st.altair_chart(grafici.grafico_analita(df, nome_a),
-                                        use_container_width=True)
+                                        width="stretch")
             elif vista == "Confronto normalizzato":
                 st.caption("Ogni valore e' rapportato al proprio intervallo di "
                            "riferimento: dentro la fascia verde significa nella "
@@ -1064,10 +1087,10 @@ with tabs[2]:
                            "l'unita' di misura. Per gli esami con il solo limite "
                            "inferiore (HDL, vitamina D…) l'indice scende quando "
                            "il valore migliora.")
-                st.altair_chart(grafici.grafico_comparativo(df), use_container_width=True)
+                st.altair_chart(grafici.grafico_comparativo(df), width="stretch")
             else:
                 st.caption("Una riga per indicatore, una colonna per prelievo.")
-                st.altair_chart(grafici.heatmap_stati(df), use_container_width=True)
+                st.altair_chart(grafici.heatmap_stati(df), width="stretch")
 
             st.divider()
             st.markdown("**Variazioni**")
@@ -1194,6 +1217,68 @@ with tabs[3]:
     st.caption("Strumento di lettura, non di diagnosi: i valori vanno interpretati "
                "dal medico alla luce della storia clinica.")
 
+    # --- Consultazione dei referti e chat sull'ambito scelto ---------------
+    # Sotto l'analisi una tantum: sfoglia i referti dell'ambito selezionato e
+    # discutine in forma conversazionale. Per una tipologia o un referto
+    # specifico la chat ragiona solo su quello; per tutto l'archivio, su tutto.
+    st.divider()
+
+    if tipo_scelto_an:
+        da_mostrare = core.documenti_di_tipo(conn, tipo_scelto_an)
+        titolo_ambito = etichetta(tipo_scelto_an).lower()
+    elif sha_scelto:
+        da_mostrare = [r for r in core.documenti_di_tipo_qualunque(conn)
+                       if r["sha256"] == sha_scelto]
+        titolo_ambito = "questo referto"
+    else:
+        da_mostrare = core.documenti_di_tipo_qualunque(conn)
+        titolo_ambito = "tutti i referti"
+
+    if da_mostrare:
+        with st.expander(f"Sfoglia i referti · {titolo_ambito} "
+                         f"({len(da_mostrare)})", icon=":material/folder_open:"):
+            for r in da_mostrare:
+                data = core.normalizza_data(r["data_documento"]) or "data ignota"
+                intest = f"**{data}**"
+                if r["struttura"]:
+                    intest += f" · {r['struttura']}"
+                st.markdown(intest)
+                if r["titolo"]:
+                    st.markdown(f"*{r['titolo']}*")
+                if r["sintesi"]:
+                    st.markdown(r["sintesi"])
+                if r["conclusioni"]:
+                    st.markdown(f"**Conclusioni:** {r['conclusioni']}")
+                if r["testo"]:
+                    with st.expander("Testo completo"):
+                        st.text(r["testo"])
+                st.divider()
+
+    st.markdown(f"**Discuti {titolo_ambito}**")
+    st.caption("Domande in forma di conversazione sull'ambito selezionato qui "
+               "sopra. Ogni domanda è indipendente dalle precedenti.")
+    if not modelli:
+        st.warning(f"Il modello «{scelti['chat']}» non è installato.")
+    elif domanda_an := st.chat_input(
+            f"Chiedi qualcosa su {titolo_ambito}…", key="chat_analisi"):
+        if sha_scelto:
+            contesto_chat = core.contesto_referto(conn, sha_scelto)
+        elif tipo_scelto_an:
+            contesto_chat = core.contesto_categoria(conn, tipo_scelto_an)
+        else:
+            contesto_chat = core.costruisci_contesto(conn, n_referti, "")
+        with st.chat_message("user"):
+            st.markdown(domanda_an)
+        sistema_chat = (
+            "Sei un assistente che aiuta a leggere referti medici. Rispondi solo "
+            "sulla base dei referti forniti. Non inventare valori o diagnosi; se "
+            "un'informazione non è nei referti, dillo. Non sostituisci il medico.")
+        messaggi_an = [
+            {"role": "system", "content": sistema_chat + "\n\nReferti:\n\n"
+             + contesto_chat},
+            {"role": "user", "content": domanda_an}]
+        mostra_risposta(scelti["chat"], messaggi_an, "chat")
+
 # --- Chat ------------------------------------------------------------------
 
 with tabs[4]:
@@ -1300,25 +1385,100 @@ with tabs[5]:
     if not core.numero_prelievi(conn):
         st.info("Carica almeno un referto.")
     else:
+        # Ambito del parere: tutto, categorie selezionate, o un singolo referto.
+        ambito = st.radio(
+            "Cosa includere nel parere",
+            ["Tutti i referti", "Solo alcune categorie", "Un singolo referto"],
+            horizontal=True, key="ambito_parere")
+
+        tipi_scelti: list[str] | None = None
+        sha_scelto: str | None = None
+        gruppi_p = core.documenti_per_tipo(conn)
+
+        if ambito == "Solo alcune categorie":
+            disponibili = [(t, TIPI[t]["label"]) for t in TIPI if gruppi_p.get(t)]
+            etichette = st.multiselect(
+                "Categorie da includere",
+                [lab for _, lab in disponibili],
+                help="Puoi combinare più categorie: esami del sangue, visite, "
+                     "ecografie…")
+            tipi_scelti = [t for t, lab in disponibili if lab in etichette]
+            if not tipi_scelti:
+                st.info("Seleziona almeno una categoria.")
+        elif ambito == "Un singolo referto":
+            tutti = core.elenco_documenti(conn)
+            # Il selectbox deve ricevere opzioni serializzabili: gli oggetti
+            # sqlite3.Row non lo sono. Passiamo gli sha (stringhe) e teniamo le
+            # descrizioni in un dizionario per format_func.
+            descrizioni = {}
+            for r in tutti:
+                data = core.normalizza_data(r["data_documento"]) or "data ignota"
+                lab = TIPI.get(r["tipo"], {}).get("label", "Referto")
+                chiavi = r.keys()
+                strut = (f" · {r['struttura']}"
+                         if "struttura" in chiavi and r["struttura"] else "")
+                descrizioni[r["sha256"]] = f"{data} — {lab}{strut}"
+            if tutti:
+                sha_scelto = st.selectbox(
+                    "Scegli il referto", list(descrizioni.keys()),
+                    format_func=lambda s: descrizioni.get(s, s),
+                    key="referto_singolo_p")
+            else:
+                st.info("Nessun referto disponibile.")
+
         c1, c2, c3 = st.columns(3)
-        quanti = c1.number_input("Referti da includere", 1,
-                                 core.numero_prelievi(conn),
-                                 min(4, core.numero_prelievi(conn)))
-        eta_modo = c2.selectbox("Eta'", ["fascia", "esatta", "omessa"],
+        eta_modo = c1.selectbox("Eta'", ["fascia", "esatta", "omessa"],
                                 help="La fascia quinquennale e' clinicamente "
                                      "sufficiente e meno identificante.")
-        lingua_p = c3.selectbox("Lingua del quesito", ["it", "en"],
+        lingua_p = c2.selectbox("Lingua del quesito", ["it", "en"],
                                 format_func=lambda x: "Italiano" if x == "it"
                                 else "English")
-        c4, c5 = st.columns(2)
-        con_bmi = c4.checkbox("Includi il BMI", value=True)
-        con_note = c5.checkbox("Includi terapie e note del profilo", value=False,
+        con_bmi = c3.checkbox("Includi il BMI", value=True)
+        con_note = st.checkbox("Includi terapie e note del profilo", value=False,
                                help="Testo libero: e' la parte che piu' "
                                     "facilmente contiene dati identificativi. "
                                     "Rileggila prima di attivarla.")
 
-        quadro = parere.quadro_anonimo(conn, int(quanti), eta=eta_modo,
-                                       includi_bmi=con_bmi, includi_note=con_note)
+        # Costruzione del quadro secondo l'ambito, unendo parte numerica e
+        # parte descrittiva quando entrambe sono pertinenti.
+        n_tot = core.numero_prelievi(conn)
+        parti_quadro = []
+        if ambito == "Tutti i referti":
+            parti_quadro.append(parere.quadro_anonimo(
+                conn, n_tot, eta=eta_modo, includi_bmi=con_bmi,
+                includi_note=con_note))
+            parti_quadro.append(parere.quadro_descrittivi(
+                conn, tipi=[t for t in TIPI if not e_tabellare(t) and gruppi_p.get(t)]))
+        elif ambito == "Solo alcune categorie" and tipi_scelti:
+            tab = [t for t in tipi_scelti if e_tabellare(t)]
+            desc = [t for t in tipi_scelti if not e_tabellare(t)]
+            if tab:
+                parti_quadro.append(parere.quadro_anonimo(
+                    conn, n_tot, eta=eta_modo, includi_bmi=con_bmi,
+                    includi_note=con_note, tipi=tab))
+            if desc:
+                parti_quadro.append(parere.quadro_descrittivi(conn, tipi=desc))
+        elif ambito == "Un singolo referto" and sha_scelto:
+            parti_quadro.append(parere.quadro_anonimo(
+                conn, n_tot, eta=eta_modo, includi_bmi=con_bmi,
+                includi_note=con_note, sha_singolo=sha_scelto))
+            parti_quadro.append(parere.quadro_descrittivi(
+                conn, sha_singolo=sha_scelto))
+
+        quadro = "\n\n".join(p for p in parti_quadro if p)
+
+        # I referti descrittivi sono testo libero: l'anonimizzazione automatica
+        # è meno affidabile che sulla tabella dei valori. Segnaliamolo.
+        include_descrittivi = "Referti descrittivi" in quadro
+        if include_descrittivi:
+            st.warning(
+                ":material/warning: Il parere include referti descrittivi (testo "
+                "libero). L'anonimizzazione automatica toglie i dati riconoscibili "
+                "— nome, codici fiscali, email, telefoni, date, indirizzi, numeri "
+                "di referto ed episodio, nomi di strutture sanitarie — ma su testo "
+                "libero non è garantita: possono restare nomi di città, nomi di "
+                "medici, o strutture scritte in forme inconsuete. Rileggi il testo "
+                "con particolare attenzione prima di inviarlo.")
 
         sintesi = st.session_state.get("sintesi_locale", "")
         c6, c7 = st.columns([1, 2])
@@ -1368,7 +1528,7 @@ with tabs[5]:
         # quesito gia' anonimizzato che l'utente vede sopra, non dati grezzi.
         import json as _json
         testo_js = _json.dumps(testo)
-        components.html(f"""
+        st.html(f"""
         <div style="display:flex;justify-content:flex-end;margin-top:-8px">
           <button id="cp" style="display:flex;align-items:center;gap:6px;
             padding:6px 12px;border:1px solid #2f6d6a;border-radius:8px;
@@ -1393,7 +1553,7 @@ with tabs[5]:
             }}
           }};
         </script>
-        """, height=48)
+        """, unsafe_allow_javascript=True)
 
         avvisi = parere.verifica(testo, core.leggi_profilo(conn))
         if avvisi:
@@ -1667,10 +1827,21 @@ with tabs[6]:
                    "aperto.")
 
 
+# --- Guida -----------------------------------------------------------------
+
+with tabs[IDX_GUIDA]:
+    st.subheader("Guida all'uso")
+    manuale = config.DIR_APP / "MANUALE.md"
+    if manuale.exists():
+        st.markdown(manuale.read_text(encoding="utf-8"))
+    else:
+        st.info("Il file MANUALE.md non è presente accanto all'applicazione.")
+
+
 # --- Utenti (solo amministratore) ------------------------------------------
 
 if e_admin:
-    with tabs[7]:
+    with tabs[8]:
         st.subheader("Gestione utenti")
         st.caption("Chi ha un'utenza abilitata vede l'intero archivio: "
                    "l'autenticazione decide chi entra, non separa i dati.")

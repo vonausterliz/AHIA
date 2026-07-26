@@ -3,6 +3,154 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.18.1 — 25 luglio 2026
+
+### Sicurezza e correzioni
+
+- **Estrazione del testo più robusta.** Alcuni PDF (referti firmati
+  digitalmente, layout a colonne) venivano letti con le lettere mescolate
+  («firmatoP deigrit…»), rendendo il testo illeggibile e l'anonimizzazione
+  inefficace. Ora l'app prova due strategie di estrazione e sceglie quella che
+  produce testo più pulito. I referti già in archivio con testo corrotto si
+  correggono col pulsante «Ri-estrai».
+- **Anonimizzazione: nuovi dati riconosciuti.** Vengono ora rimossi anche il
+  nome del medico firmatario («FIRMATO DA…», «Dr./Dott.ssa…»), il numero R.E.A.,
+  i siti web e i numeri di telefono/fax in formato fisso. Corretto un caso in cui
+  il riconoscimento del medico poteva sconfinare sulla riga successiva e oscurare
+  un dato clinico. Verificato con una regressione su 18 tipi di dato sensibile e
+  11 di dato clinico: tutti i sensibili rimossi, nessun clinico alterato.
+
+## 1.18.0 — 25 luglio 2026
+
+### Novità
+
+- **Ri-estrazione di un referto già in archivio.** Accanto a ogni documento, nella
+  scheda Referti, c'è ora un pulsante «Ri-estrai» che rielabora il referto dal suo
+  PDF originale con i modelli attuali, senza doverlo ricaricare a mano. Utile
+  quando l'estrazione è migliorata da quando il referto fu caricato: il testo
+  salvato viene rigenerato. Serve in particolare per l'anonimizzazione del secondo
+  parere, che lavora sul testo salvato al momento del caricamento.
+
+## 1.17.4 — 25 luglio 2026
+
+### Sicurezza
+
+- **Anonimizzazione basata sulle etichette anagrafiche.** Oltre a inseguire il
+  nome del profilo, l'oscuramento ora riconosce i valori che seguono le etichette
+  tipiche dei referti («Cognome:», «Nome:», «Nato a», «Residente a») e i nomi in
+  maiuscolo seguiti da un codice: così vengono rimossi anche cognomi, secondi
+  nomi e luoghi che non sono nel profilo dell'utente. Verificato con una batteria
+  di regressione che nessun dato clinico (valori, misure, intestazioni come
+  «REFERTO ECOGRAFICO ADDOME») venga oscurato per errore.
+
+## 1.17.3 — 25 luglio 2026
+
+### Sicurezza
+
+- **Anonimizzazione dei referti descrittivi ulteriormente rafforzata.** Ora
+  vengono rimossi anche: i codici episodio/prestazione (es. «EP2300018443»), i
+  codici alfanumerici lunghi, e i nomi delle strutture sanitarie (poliambulatorio,
+  ospedale, clinica, ASST, ASL, IRCCS, ecc.). Verificato che i dati clinici —
+  valori, misure, prestazioni — restino intatti. Restano non garantiti, come già
+  segnalato, i nomi di città isolati e le strutture scritte in forme inconsuete:
+  l'avviso nell'app ora lo dice esplicitamente.
+
+## 1.17.2 — 25 luglio 2026
+
+### Correzioni
+
+- Corretto un errore («cannot pickle 'sqlite3.Row' object») che faceva fallire il
+  secondo parere scegliendo «Un singolo referto»: il selettore riceveva le righe
+  grezze del database, che Streamlit non riesce a serializzare. Ora riceve gli
+  identificativi dei referti, con la descrizione gestita a parte.
+
+### Documentazione
+
+- Il README ora include le istruzioni per installare Ollama su macOS, Windows e
+  Linux, come primo passo dell'installazione, prima di scaricare i modelli.
+
+## 1.17.1 — 25 luglio 2026
+
+- Rimossi gli avvisi di deprecazione di Streamlit nel log di avvio: sostituito
+  `use_container_width=True` con `width="stretch"` nei grafici, e
+  `components.html` con `st.html(..., unsafe_allow_javascript=True)` per il
+  pulsante di copia del secondo parere. Quest'ultimo, non essendo più dentro un
+  iframe, ha ora accesso più diretto agli appunti del browser.
+
+## 1.17.0 — 25 luglio 2026
+
+### Sicurezza
+
+- **Anonimizzazione dei referti descrittivi rafforzata.** Nel secondo parere,
+  quando si includeva un referto descrittivo potevano restare il cognome e il
+  numero di referto. Ora l'oscuramento riconosce anche: il cognome da solo o in
+  ordine invertito (e ogni singola parte del nome del profilo), i numeri di
+  referto/protocollo/accettazione/cartella nosologica, gli identificativi
+  numerici lunghi (tessera sanitaria), le date scritte a parole, e i nomi
+  preceduti da titoli di cortesia. Verificato su un referto realistico completo:
+  tutti i dati identificativi strutturati vengono rimossi, i dati clinici
+  restano. Resta il limite noto, già segnalato nell'app, che su testo libero
+  l'anonimizzazione non è garantita (es. i nomi di città).
+
+### Modifiche
+
+- **Scheda «Analisi» unificata.** La scheda Analisi ora accorpa anche la
+  consultazione dei referti e la chat conversazionale che prima stavano nella
+  scheda «Referti descrittivi», che è stata rimossa per eliminare la
+  sovrapposizione. Oltre alla lettura d'insieme una tantum, da qui si sfogliano i
+  referti dell'ambito scelto (tutto, una tipologia, un singolo referto) e ci si
+  discute in forma di conversazione.
+
+## 1.16.0 — 25 luglio 2026
+
+### Novità
+
+- **Manuale d'uso.** Aggiunto un manuale completo (`MANUALE.md`) che accompagna
+  l'uso quotidiano dell'app scheda per scheda, con spiegazioni semplici e note
+  tecniche dove servono. È consultabile anche dentro l'app, nella nuova scheda
+  **Guida**, così è sempre a portata senza uscire dall'applicazione.
+
+## 1.15.1 — 25 luglio 2026
+
+- Corretto un errore («No item with that key») che si verificava scegliendo
+  «Un singolo referto» nel secondo parere: l'elenco dei documenti non includeva
+  la colonna della struttura usata per descriverli nella lista.
+
+## 1.15.0 — 25 luglio 2026
+
+### Novità
+
+- **Secondo parere con ambito selezionabile.** Invece di prendere in blocco un
+  numero fisso di prelievi, ora si sceglie cosa includere: tutti i referti, solo
+  alcune categorie (selezione multipla — sangue, visite, ecografie…), oppure un
+  singolo referto scelto dalla lista. Il quesito viene costruito di conseguenza,
+  unendo la tabella dei valori numerici e il testo dei referti descrittivi
+  pertinenti.
+- **Anonimizzazione dei referti descrittivi.** Quando il parere include referti
+  di testo libero (visite, ecografie), il loro contenuto passa da un
+  oscuramento automatico che sostituisce codici fiscali, email, telefoni, date,
+  indirizzi e il nome del profilo; le date diventano il solo anno. Un avviso
+  ricorda che su testo libero l'anonimizzazione non è garantita e che va riletto
+  con attenzione. Il controllo pre-invio esistente resta come ultima rete.
+
+## 1.14.0 — 25 luglio 2026
+
+### Novità
+
+- **Fasce fuori norma evidenziate nei grafici.** Nell'andamento di ogni analita,
+  le zone fuori dall'intervallo di riferimento sono ora colorate di rosso chiaro
+  (sopra il massimo e sotto il minimo): si vede a colpo d'occhio quando un valore
+  cade fuori norma, senza dover leggere i numeri. La banda normale resta tenue
+  sullo sfondo. La scheda è stata rinominata «Andamento analiti».
+
+- **Nuova scheda «Referti descrittivi».** I referti non numerici — visite,
+  ecografie, radiografie, TAC, cardiologia — sono raggruppati per tipo e
+  consultabili per categoria, separati dagli esami del sangue. Per ogni categoria
+  si vedono i referti in ordine cronologico con sintesi, conclusioni e testo
+  completo, e una chat dedicata che ragiona **solo** su quella categoria: si può
+  chiedere «come è cambiata la mia situazione oculistica nel tempo?» senza che il
+  modello mescoli gli esami del sangue o altre visite.
+
 ## 1.13.0 — 24 luglio 2026
 
 ### Novità

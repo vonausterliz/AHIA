@@ -150,8 +150,57 @@ in Metal, con una resa più bassa nella lettura delle scansioni.
 
 ## Installazione
 
+### 1. Installa Ollama
+
+AHIA usa [Ollama](https://ollama.com) per eseguire i modelli in locale. Va
+installato per primo.
+
+**macOS** — scarica l'app da [ollama.com/download](https://ollama.com/download),
+aprila e trascinala nelle Applicazioni. Al primo avvio si installa da sé e resta
+attiva nella barra dei menu. In alternativa, con [Homebrew](https://brew.sh):
+
+```bash
+brew install ollama
+```
+
+**Windows** — scarica l'installer da
+[ollama.com/download](https://ollama.com/download) ed eseguilo. Ollama parte
+automaticamente e resta nell'area di notifica.
+
+**Linux** — un comando solo:
+
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+```
+
+Per verificare che Ollama sia attivo, apri un terminale e digita `ollama list`:
+se risponde (anche con una lista vuota), è pronto. Ollama espone un servizio
+locale su `http://localhost:11434`; AHIA vi si collega da sé.
+
+> Su Windows e macOS l'app di Ollama va lasciata in esecuzione mentre usi AHIA.
+> Su Linux, se non parte da solo, avvialo con `ollama serve`.
+
+### 2. Scarica i modelli
+
+Una volta sola, dal terminale:
+
+```bash
+ollama pull qwen3:14b && ollama pull qwen2.5vl:7b
+```
+
+Facoltativo, per la ricerca semantica:
+
+```bash
+ollama pull bge-m3
+```
+
+Puoi anche non scaricarli ora: se apri AHIA e un modello selezionato non è
+installato, l'app te lo segnala con il comando esatto per scaricarlo.
+
+### 3. Avvia AHIA
+
 Scompatta l'archivio, entra nella cartella e lancia lo script, che crea il
-virtualenv, installa le dipendenze e avvia l'app.
+virtualenv, installa le dipendenze Python e avvia l'app.
 
 **macOS e Linux**
 
@@ -174,16 +223,6 @@ cd ahia && python3 -m venv .venv && source .venv/bin/activate && pip install -r 
 ```bat
 cd ahia && python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt && streamlit run app.py
 ```
-
-I modelli vanno scaricati una volta sola, dal terminale:
-
-```bash
-ollama pull qwen3:14b && ollama pull qwen2.5vl:7b
-```
-
-oppure dall'app: se un modello selezionato non risulta installato, l'app lo
-segnala con il comando per scaricarlo. Non parte da solo — un modello può pesare
-parecchi gigabyte, quindi la decisione resta tua.
 
 L'app risponde su `http://localhost:8501`.
 
