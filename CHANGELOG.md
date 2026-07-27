@@ -3,6 +3,47 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.21.0 — 27 luglio 2026
+
+### Novità e correzioni
+
+- **Diagnostica più ricca.** Corretto un difetto per cui le chiamate in chat e
+  analisi non registravano i token (apparivano «None»): ora lo streaming
+  raccoglie i contatori finali di Ollama. Aggiunte metriche: durata massima,
+  token per risposta, velocità di generazione (token/s), numero di elaborazioni.
+  Nuova tabella «Per categoria» che mostra dove va il tempo (analisi, chat,
+  estrazione) e un grafico dell'andamento delle durate. Anche l'estrazione dei
+  referti ora registra token e durata.
+
+## 1.20.1 — 27 luglio 2026
+
+- La scheda **Diagnostica** è ora visibile a ogni utente, non solo
+  all'amministratore: ognuno vede le metriche e lo storico del proprio archivio.
+  Così la diagnostica è utile a tutti senza intaccare la separazione dei dati —
+  nessuno vede le attività altrui, coerentemente con il resto dell'app.
+
+## 1.20.0 — 27 luglio 2026
+
+### Novità
+
+- **Osservabilità: scheda «Diagnostica».** Un registro eventi unico traccia le
+  chiamate ai modelli (durata, token), le operazioni (estrazioni) e gli errori.
+  La nuova scheda Diagnostica (solo amministratore) mostra metriche di sintesi,
+  la tabella degli eventi filtrabile per modelli o errori, l'esportazione in CSV
+  e lo svuotamento del registro. Il registro contiene solo metriche e messaggi
+  tecnici — mai testo di referti o dati clinici.
+
+## 1.19.0 — 25 luglio 2026
+
+### Novità
+
+- **Analisi più approfondite.** Rivisto il prompt dell'analisi perché il modello:
+  colleghi i valori in pattern clinici (più marcatori dello stesso organo, o una
+  carenza che spiega più valori) invece di commentarli isolati; ordini i risultati
+  per rilevanza, mettendo in cima ciò che conta di più; e contestualizzi i valori
+  di poco fuori norma come spesso banali, per non allarmare inutilmente. La
+  struttura in quattro sezioni resta invariata.
+
 ## 1.18.1 — 25 luglio 2026
 
 ### Sicurezza e correzioni

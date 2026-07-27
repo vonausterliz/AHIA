@@ -43,6 +43,7 @@ AHIA è organizzata in schede, in cima alla pagina:
 - **Secondo parere** — prepari un quesito anonimo per un modello esterno.
 - **Dizionario** — gestisci come le diciture dei laboratori vengono unificate.
 - **Guida** — questo manuale, sempre a portata dentro l'app.
+- **Diagnostica** — metriche tecniche e storico delle tue attività.
 - **Utenti** — solo per l'amministratore, per gestire gli accessi.
 
 Le prossime sezioni le spiegano una per una.
@@ -217,6 +218,25 @@ avresti tre serie storiche spezzate invece di una.
 La maggior parte delle unificazioni avviene da sola. Quando AHIA incontra una
 dicitura che non riconosce, la segnala qui: puoi collegarla all'esame giusto,
 con una proposta suggerita dal modello che confermi tu.
+
+---
+
+## Diagnostica
+
+**A cosa serve.** Mostra come sta lavorando l'app sul tuo archivio: quante volte
+ha interrogato i modelli, quanto tempo ci mette in media, quanti errori ci sono
+stati e uno storico delle tue operazioni. Utile per capire se qualcosa è lento o
+non va, e per avere un'idea del carico di lavoro.
+
+In cima ci sono quattro numeri di sintesi (chiamate ai modelli, errori, durata
+media, token totali). Sotto, la tabella degli eventi, filtrabile per vedere solo
+le chiamate ai modelli o solo gli errori. Puoi esportare tutto in CSV o svuotare
+il registro.
+
+> **Riguarda solo il tuo archivio.** Ogni utente vede la diagnostica delle
+> proprie attività, non di quelle altrui: come per tutti i dati, gli archivi
+> restano separati. E il registro contiene solo metriche tecniche (tempi,
+> modelli, token) e messaggi d'errore — mai il testo dei referti né i valori.
 
 ---
 

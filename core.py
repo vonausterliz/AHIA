@@ -106,6 +106,18 @@ CREATE TABLE IF NOT EXISTS messaggi (
     conversazione_id INTEGER NOT NULL REFERENCES conversazioni(id) ON DELETE CASCADE,
     ruolo TEXT NOT NULL, contenuto TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS eventi (
+    id INTEGER PRIMARY KEY,
+    quando TEXT NOT NULL DEFAULT (datetime('now')),
+    tipo TEXT NOT NULL,          -- 'modello', 'operazione', 'errore'
+    categoria TEXT,              -- fase/funzione: estrazione, analisi, login…
+    esito TEXT,                  -- 'ok' | 'errore'
+    modello TEXT,
+    durata_s REAL,
+    token_in INTEGER,
+    token_out INTEGER,
+    dettaglio TEXT               -- messaggio d'errore o nota, mai dati sanitari
+);
 """
 
 
@@ -529,6 +541,83 @@ def leggi_testo(conn, sha: str) -> str:
     return r["testo"] if r else ""
 
 
+def registra_evento(conn, tipo: str, *, categoria: str = "", esito: str = "ok",
+                    modello: str = "", durata_s: float | None = None,
+                    token_in: int | None = None, token_out: int | None = None,
+                    dettaglio: str = "") -> None:
+    """Scrive una riga nel registro eventi (osservabilità).
+
+    IMPORTANTE: `dettaglio` è solo per note tecniche e messaggi d'errore. Non
+    deve MAI contenere testo di referti, valori clinici o dati personali — il
+    registro è diagnostica, non un archivio dei contenuti. Best-effort: se la
+    scrittura fallisce, l'operazione principale non deve risentirne.
+    """
+    try:
+        conn.execute(
+            """INSERT INTO eventi
+               (tipo, categoria, esito, modello, durata_s, token_in, token_out,
+                dettaglio)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (tipo, categoria, esito, modello, durata_s, token_in, token_out,
+             (dettaglio or "")[:500]))
+        conn.commit()
+    except sqlite3.Error:
+        pass
+
+
+def leggi_eventi(conn, limite: int = 500, tipo: str | None = None) -> list:
+    """Eventi recenti, più nuovi prima, opzionalmente filtrati per tipo."""
+    if tipo:
+        return conn.execute(
+            "SELECT * FROM eventi WHERE tipo = ? ORDER BY id DESC LIMIT ?",
+            (tipo, limite)).fetchall()
+    return conn.execute(
+        "SELECT * FROM eventi ORDER BY id DESC LIMIT ?", (limite,)).fetchall()
+
+
+def statistiche_eventi(conn) -> dict:
+    """Riepilogo per il cruscotto: conteggi, durate, token, velocità."""
+    r = conn.execute(
+        """SELECT
+             COUNT(*) FILTER (WHERE tipo='modello') AS chiamate,
+             COUNT(*) FILTER (WHERE tipo='operazione') AS operazioni,
+             COUNT(*) FILTER (WHERE esito='errore') AS errori,
+             ROUND(AVG(durata_s) FILTER (WHERE tipo='modello'), 1) AS durata_media,
+             ROUND(MAX(durata_s) FILTER (WHERE tipo='modello'), 1) AS durata_max,
+             COALESCE(SUM(token_in), 0) AS tok_in,
+             COALESCE(SUM(token_out), 0) AS tok_out,
+             ROUND(AVG(token_out) FILTER (WHERE tipo='modello'), 0) AS tok_out_medio
+           FROM eventi""").fetchone()
+    stat = dict(r) if r else {}
+    # velocità di generazione media (token/s), quando abbiamo i dati
+    vel = conn.execute(
+        """SELECT ROUND(SUM(token_out) * 1.0 / NULLIF(SUM(durata_s), 0), 1)
+           FROM eventi WHERE tipo='modello' AND token_out > 0 AND durata_s > 0"""
+    ).fetchone()
+    stat["token_s"] = vel[0] if vel else None
+    return stat
+
+
+def eventi_per_categoria(conn) -> list:
+    """Conteggio e durata media per categoria: dove va il tempo."""
+    return conn.execute(
+        """SELECT categoria,
+                  COUNT(*) AS n,
+                  ROUND(AVG(durata_s), 1) AS durata_media,
+                  COALESCE(SUM(token_out), 0) AS tok_out,
+                  COUNT(*) FILTER (WHERE esito='errore') AS errori
+           FROM eventi
+           WHERE categoria != ''
+           GROUP BY categoria
+           ORDER BY n DESC""").fetchall()
+
+
+def azzera_eventi(conn) -> None:
+    """Svuota il registro eventi."""
+    conn.execute("DELETE FROM eventi")
+    conn.commit()
+
+
 def cerca_testo(conn, query: str, limite: int = 20) -> list[sqlite3.Row]:
     """Ricerca full-text sui documenti, con l'estratto attorno alle occorrenze."""
     if not query.strip():
@@ -718,11 +807,17 @@ Limiti che rispetti sempre:
 
 PROMPT_ANALISI = """Analizza i dati qui sopra e produci:
 
-1. **Quadro d'insieme** — due o tre righe.
-2. **Fuori range** — valori alterati, entita' dello scostamento, cosa misura
-   quell'esame.
-3. **Andamenti** — analiti che si muovono in modo consistente tra un referto e
-   l'altro, anche restando nella norma.
+1. **Quadro d'insieme** — due o tre righe, mettendo in cima cio' che merita
+   piu' attenzione.
+2. **Fuori range** — valori alterati, ordinati per rilevanza clinica (prima i
+   piu' marcati). Per ciascuno: entita' dello scostamento e cosa misura
+   quell'esame. Se un valore e' di poco fuori norma e coerente col resto,
+   dillo: spesso e' una variazione banale, non un problema.
+3. **Pattern e andamenti** — non limitarti a commentare i valori uno per uno:
+   collega quelli che raccontano una storia comune (piu' marcatori dello stesso
+   organo che si muovono insieme, o una carenza che spiega piu' valori). Includi
+   qui anche gli analiti che si muovono in modo consistente nel tempo tra un
+   referto e l'altro, anche restando nella norma.
 4. **Da chiedere al medico** — domande concrete da portare alla visita."""
 
 # Sezione aggiuntiva, agganciata solo se l'utente attiva il controllo delle
@@ -1209,6 +1304,13 @@ def chat_stream(model: str, messaggi: list[dict],
             if pezzo := messaggio.get("content"):
                 yield "testo", pezzo
             if blocco.get("done"):
+                # ultimo blocco: Ollama include i contatori della chiamata
+                metriche = {
+                    "token_in": blocco.get("prompt_eval_count") or 0,
+                    "token_out": blocco.get("eval_count") or 0,
+                    "durata_s": round((blocco.get("total_duration") or 0) / 1e9, 1),
+                }
+                yield "metriche", json.dumps(metriche)
                 break
 
 

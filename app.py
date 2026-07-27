@@ -370,6 +370,10 @@ def riapplica_alias(alias: dict[str, str]) -> int:
 
 def mostra_risposta(model: str, messaggi: list[dict], funzione: str) -> str:
     """Rende la risposta in streaming, mostrando anche la fase di ragionamento."""
+    import time as _time
+    import json as _json
+    avvio = _time.monotonic()
+    metriche = {}
     with st.chat_message("assistant"):
         stato = st.status("In attesa del modello…", expanded=False)
         segnaposto = st.empty()
@@ -381,6 +385,8 @@ def mostra_risposta(model: str, messaggi: list[dict], funzione: str) -> str:
                     stato.update(label=f"Il modello sta ragionando… "
                                        f"({len(pensiero)} caratteri)")
                     stato.write(pezzo)
+                elif tipo == "metriche":
+                    metriche = _json.loads(pezzo)
                 else:
                     if not testo:
                         stato.update(label="Ragionamento concluso", state="complete")
@@ -389,6 +395,10 @@ def mostra_risposta(model: str, messaggi: list[dict], funzione: str) -> str:
         except core.ErroreOllama as e:
             stato.update(label="Errore", state="error")
             st.error(str(e))
+            core.registra_evento(conn, "errore", categoria=funzione,
+                                  esito="errore", modello=model,
+                                  durata_s=round(_time.monotonic() - avvio, 1),
+                                  dettaglio=str(e))
             return ""
         if not testo:
             stato.update(label="Nessuna risposta", state="error")
@@ -397,6 +407,13 @@ def mostra_risposta(model: str, messaggi: list[dict], funzione: str) -> str:
                        "i referti nel contesto o disattiva `think` in config.py.")
         else:
             stato.update(label="Completato", state="complete")
+        core.registra_evento(
+            conn, "modello", categoria=funzione,
+            esito="ok" if testo else "vuoto", modello=model,
+            durata_s=metriche.get("durata_s")
+            or round(_time.monotonic() - avvio, 1),
+            token_in=metriche.get("token_in"),
+            token_out=metriche.get("token_out"))
         return testo
 
 
@@ -559,12 +576,14 @@ etichette_schede = [
     ":material/forum: Chat",
     ":material/share: Secondo parere",
     ":material/menu_book: Dizionario",
+    ":material/monitoring: Diagnostica",
     ":material/help: Guida",
 ]
 if e_admin:
     etichette_schede.append(":material/group: Utenti")
 tabs = st.tabs(etichette_schede)
-IDX_GUIDA = 7
+IDX_DIAGNOSTICA = 7
+IDX_GUIDA = 8
 
 # --- Profilo ---------------------------------------------------------------
 
@@ -720,14 +739,28 @@ with tabs[1]:
                     annota(f"**Errore:** {e}")
                     riquadro.update(label=f"{up.name} — errore Ollama",
                                     state="error")
+                    core.registra_evento(conn, "errore", categoria="estrazione",
+                                          esito="errore", dettaglio=str(e))
                     doc = None
                 except Exception as e:  # JSON malformato, PDF illeggibile
                     annota(f"**Errore:** {type(e).__name__}: {e}")
                     riquadro.update(label=f"{up.name} — elaborazione fallita",
                                     state="error")
+                    core.registra_evento(
+                        conn, "errore", categoria="estrazione", esito="errore",
+                        dettaglio=f"{type(e).__name__}: {e}")
                     doc = None
 
                 if doc:
+                    log_doc = doc.get("log", [])
+                    tok_in = sum(m.get("token_in", 0) or 0 for m in log_doc)
+                    tok_out = sum(m.get("token_out", 0) or 0 for m in log_doc)
+                    dur = sum(m.get("totale_s", 0) or 0 for m in log_doc)
+                    core.registra_evento(
+                        conn, "operazione", categoria="estrazione", esito="ok",
+                        modello=scelti.get("estrazione", ""),
+                        durata_s=round(dur, 1) if dur else None,
+                        token_in=tok_in or None, token_out=tok_out or None)
                     righe = [r for e in doc["esami"]
                              if (r := ingest.normalizza(e, alias, sconosciuti))]
                     nuovi_nomi = [r["nome_referto"] for r in righe
@@ -1838,10 +1871,96 @@ with tabs[IDX_GUIDA]:
         st.info("Il file MANUALE.md non è presente accanto all'applicazione.")
 
 
+# --- Diagnostica -----------------------------------------------------------
+
+with tabs[IDX_DIAGNOSTICA]:
+    st.subheader("Diagnostica")
+    st.caption("Osservabilità tecnica dell'app: prestazioni dei modelli, "
+               "errori e storico delle tue operazioni. Riguarda solo il tuo "
+               "archivio. Nessun dato clinico è registrato qui — solo metriche "
+               "e messaggi tecnici.")
+
+    stat = core.statistiche_eventi(conn)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Chiamate ai modelli", stat.get("chiamate", 0))
+    c2.metric("Errori", stat.get("errori", 0))
+    c3.metric("Durata media", f"{stat.get('durata_media') or 0:g} s")
+    c4.metric("Durata max", f"{stat.get('durata_max') or 0:g} s")
+
+    c5, c6, c7, c8 = st.columns(4)
+    tok_tot = (stat.get("tok_in", 0) or 0) + (stat.get("tok_out", 0) or 0)
+    c5.metric("Token totali", f"{tok_tot:,}".replace(",", "."))
+    c6.metric("Token/risposta", f"{stat.get('tok_out_medio') or 0:g}")
+    c7.metric("Velocità", f"{stat.get('token_s') or 0:g} tok/s"
+              if stat.get("token_s") else "—")
+    c8.metric("Elaborazioni", stat.get("operazioni", 0))
+
+    # Dove va il tempo: ripartizione per categoria
+    per_cat = core.eventi_per_categoria(conn)
+    if per_cat:
+        st.divider()
+        st.markdown("**Per categoria**")
+        import pandas as pd
+        dfc = pd.DataFrame([{
+            "Categoria": r["categoria"],
+            "Eventi": r["n"],
+            "Durata media (s)": r["durata_media"],
+            "Token generati": r["tok_out"],
+            "Errori": r["errori"],
+        } for r in per_cat])
+        st.dataframe(dfc, width="stretch", hide_index=True)
+
+    # Andamento delle durate nel tempo
+    eventi_modello = core.leggi_eventi(conn, limite=50, tipo="modello")
+    durate = [(e["quando"], e["durata_s"]) for e in reversed(eventi_modello)
+              if e["durata_s"]]
+    if len(durate) >= 2:
+        st.markdown("**Andamento durate delle chiamate**")
+        import pandas as pd
+        dfd = pd.DataFrame(durate, columns=["quando", "durata"])
+        st.line_chart(dfd.set_index("quando"), height=180)
+
+    st.divider()
+    vista = st.radio("Mostra", ["Tutto", "Solo modelli", "Solo errori"],
+                     horizontal=True, label_visibility="collapsed")
+    filtro = {"Solo modelli": "modello", "Solo errori": "errore"}.get(vista)
+    eventi = core.leggi_eventi(conn, limite=300, tipo=filtro)
+
+    if not eventi:
+        st.info("Nessun evento registrato finora. Le metriche compaiono qui "
+                "man mano che usi i modelli — analisi, chat, caricamenti.")
+    else:
+        import pandas as pd
+        righe = []
+        for e in eventi:
+            righe.append({
+                "Quando": e["quando"],
+                "Tipo": e["tipo"],
+                "Categoria": e["categoria"] or "",
+                "Esito": e["esito"] or "",
+                "Modello": e["modello"] or "",
+                "Durata (s)": e["durata_s"],
+                "Token in": e["token_in"],
+                "Token out": e["token_out"],
+                "Dettaglio": e["dettaglio"] or "",
+            })
+        st.dataframe(pd.DataFrame(righe), width="stretch", hide_index=True)
+
+        st.download_button(
+            "Esporta il registro (CSV)",
+            pd.DataFrame(righe).to_csv(index=False).encode(),
+            "diagnostica-ahia.csv", "text/csv", icon=":material/download:")
+
+    st.divider()
+    if st.button("Svuota il registro", icon=":material/delete_sweep:"):
+        core.azzera_eventi(conn)
+        st.rerun()
+
+
 # --- Utenti (solo amministratore) ------------------------------------------
 
 if e_admin:
-    with tabs[8]:
+    with tabs[9]:
         st.subheader("Gestione utenti")
         st.caption("Chi ha un'utenza abilitata vede l'intero archivio: "
                    "l'autenticazione decide chi entra, non separa i dati.")
