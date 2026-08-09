@@ -22,9 +22,19 @@ def main() -> int:
     parser.add_argument(
         "--verifica-obiettivi", action="store_true",
         help="restituisce codice 1 se almeno un obiettivo non è raggiunto")
+    gruppo_corpus = parser.add_mutually_exclusive_group()
+    gruppo_corpus.add_argument(
+        "--holdout", action="store_true",
+        help="usa il corpus holdout congelato, mai usato per il tuning")
+    gruppo_corpus.add_argument(
+        "--corpus", type=Path,
+        help="usa un corpus JSON nel formato benchmark AHIA")
     args = parser.parse_args()
 
-    metadata, casi = benchmark_pii.carica_corpus()
+    percorso = (args.corpus or
+                (benchmark_pii.CORPUS_HOLDOUT if args.holdout
+                 else benchmark_pii.CORPUS_PREDEFINITO))
+    metadata, casi = benchmark_pii.carica_corpus(percorso)
     rapporto = benchmark_pii.valuta(
         casi, benchmark_pii.rilevatore_ahia(con_presidio=not args.base))
     rapporto["corpus"] = metadata

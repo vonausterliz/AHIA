@@ -1,0 +1,274 @@
+{
+  "version": 1,
+  "kind": "holdout",
+  "frozen": true,
+  "frozen_at": "2026-08-09",
+  "license": "CC0-1.0",
+  "provenance": "Corpus holdout interamente sintetico creato per AHIA. Non contiene dati di persone reali e non deriva dal corpus di sviluppo. Include impaginazione multilinea, rumore OCR simulato, più PII nello stesso testo e negativi clinici difficili.",
+  "target_cases": 80,
+  "groups": [
+    {
+      "id": "holdout_paziente_profilo",
+      "type": "PAZIENTE",
+      "profile_value": true,
+      "template": "Assistito/a: {pii}\nMotivo: rivalutazione della terapia anticoagulante.",
+      "must_preserve": ["rivalutazione della terapia anticoagulante"],
+      "values": ["Arianna Monti", "Tommaso Guerra", "Beatrice Rinaldi", "Enrico Sala", "Noemi Caruso", "Pietro Mancini"]
+    },
+    {
+      "id": "holdout_telefono",
+      "type": "CONTATTO",
+      "template": "Per comunicazioni sul controllo chiamare {pii}; INR 2,3.",
+      "must_preserve": ["INR 2,3"],
+      "values": ["+39 348-7712040", "349.8803151", "+39 366 4421908", "347-6159022", "+39 320.7316845", "333 9062714"]
+    },
+    {
+      "id": "holdout_email",
+      "type": "CONTATTO",
+      "template": "Invio copia a {pii}\nConclusione: reperto invariato.",
+      "must_preserve": ["Conclusione: reperto invariato"],
+      "values": ["alfa.17@invalid.example", "beta+referto@invalid.example", "gamma_9@invalid.example", "delta.ocr@invalid.example", "epsilon22@invalid.example", "zeta-care@invalid.example"]
+    },
+    {
+      "id": "holdout_documento",
+      "type": "IDENTIFICATIVO_DOCUMENTO",
+      "template": "Accettazione: {pii}\nPotassio 4,1 mmol/L.",
+      "must_preserve": ["Potassio 4,1 mmol/L"],
+      "values": ["RX-741902", "LAB/630184", "ECO.529176", "PRAT-418265", "ACC/307154", "EP-296043"]
+    },
+    {
+      "id": "holdout_data",
+      "type": "DATA_CLINICA",
+      "template": "Esame eseguito il {pii}; Hb 13,7 g/dL.",
+      "must_preserve": ["Hb 13,7 g/dL"],
+      "values": ["3 gennaio 2026", "17 febbraio 2025", "9 aprile 2024", "26 luglio 2023", "1 ottobre 2022", "14 dicembre 2021"]
+    },
+    {
+      "id": "holdout_indirizzo",
+      "type": "INDIRIZZO",
+      "template": "Domicilio dichiarato: {pii}\nNessuna allergia nota.",
+      "must_preserve": ["Nessuna allergia nota"],
+      "values": ["Via delle Betulle 73", "Viale dei Cedri 19", "Piazza Mercurio 11", "Corso del Mulino 52", "Largo Ginestra 28", "Vicolo della Torre 7"]
+    }
+  ],
+  "explicit_cases": [
+    {
+      "id": "holdout_multiplo_01",
+      "template": "Paziente {p}; refertato da {m}.\nCreatinina 0,84 mg/dL.",
+      "entities": [
+        {"placeholder": "p", "value": "Camilla Bernardi", "type": "PAZIENTE"},
+        {"placeholder": "m", "value": "Dott. Renato Fabbri", "type": "MEDICO"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["Creatinina 0,84 mg/dL"]
+    },
+    {
+      "id": "holdout_multiplo_02",
+      "template": "Nome: {p}\nTel: {t}\nSaturazione 97%.",
+      "entities": [
+        {"placeholder": "p", "value": "Samuele Piras", "type": "PAZIENTE"},
+        {"placeholder": "t", "value": "+39 351 7284061", "type": "CONTATTO"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["Saturazione 97%"]
+    },
+    {
+      "id": "holdout_multiplo_03",
+      "template": "{s}\nReferto n° {d}\nEcografia addome: negativa.",
+      "entities": [
+        {"placeholder": "s", "value": "Ospedale del Faro", "type": "STRUTTURA"},
+        {"placeholder": "d", "value": "US-184730", "type": "IDENTIFICATIVO_DOCUMENTO"}
+      ],
+      "must_preserve": ["Ecografia addome: negativa"]
+    },
+    {
+      "id": "holdout_multiplo_04",
+      "template": "CF {cf} | visita {data}\nVES 12 mm/h.",
+      "entities": [
+        {"placeholder": "cf", "value": "LNGMNL91D48G273Q", "type": "CODICE_FISCALE"},
+        {"placeholder": "data", "value": "08/05/2026", "type": "DATA_CLINICA"}
+      ],
+      "must_preserve": ["VES 12 mm/h"]
+    },
+    {
+      "id": "holdout_multiplo_05",
+      "template": "Assistita {p}, residente in {a}.\nTerapia invariata.",
+      "entities": [
+        {"placeholder": "p", "value": "Miriam Valenti", "type": "PAZIENTE"},
+        {"placeholder": "a", "value": "Via del Frassino 64", "type": "INDIRIZZO"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["Terapia invariata"]
+    },
+    {
+      "id": "holdout_multiplo_06",
+      "template": "A cura del {m}\nID episodio: {d}\nDiagnosi da confermare.",
+      "entities": [
+        {"placeholder": "m", "value": "Dr. Cesare Nobile", "type": "MEDICO"},
+        {"placeholder": "d", "value": "EP912640", "type": "IDENTIFICATIVO_DOCUMENTO"}
+      ],
+      "must_preserve": ["Diagnosi da confermare"]
+    },
+    {
+      "id": "holdout_multiplo_07",
+      "template": "Paz.: {p}\ne-mail {e}\nLDL 103 mg/dL.",
+      "entities": [
+        {"placeholder": "p", "value": "Viola De Luca", "type": "PAZIENTE"},
+        {"placeholder": "e", "value": "viola.test@invalid.example", "type": "CONTATTO"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["LDL 103 mg/dL"]
+    },
+    {
+      "id": "holdout_multiplo_08",
+      "template": "{s} - pratica {d}\nRM encefalo senza lesioni acute.",
+      "entities": [
+        {"placeholder": "s", "value": "Clinica del Gelsomino", "type": "STRUTTURA"},
+        {"placeholder": "d", "value": "RM/805319", "type": "IDENTIFICATIVO_DOCUMENTO"}
+      ],
+      "must_preserve": ["RM encefalo senza lesioni acute"]
+    },
+    {
+      "id": "holdout_multiplo_09",
+      "template": "Il {data} il paziente {p} ha eseguito spirometria.",
+      "entities": [
+        {"placeholder": "data", "value": "2026-06-11", "type": "DATA_CLINICA"},
+        {"placeholder": "p", "value": "Diego Santoro", "type": "PAZIENTE"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["ha eseguito spirometria"]
+    },
+    {
+      "id": "holdout_multiplo_10",
+      "template": "Recapito {t}; domicilio {a}.\nControllo fra tre mesi.",
+      "entities": [
+        {"placeholder": "t", "value": "338-5172940", "type": "CONTATTO"},
+        {"placeholder": "a", "value": "Piazza del Melo 36", "type": "INDIRIZZO"}
+      ],
+      "must_preserve": ["Controllo fra tre mesi"]
+    },
+    {
+      "id": "holdout_ocr_01",
+      "template": "N0ME: {p}\nREFERT0: {d}\nGlicemia nella norma.",
+      "entities": [
+        {"placeholder": "p", "value": "Omar Vitale", "type": "PAZIENTE"},
+        {"placeholder": "d", "value": "GL-693208", "type": "IDENTIFICATIVO_DOCUMENTO"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["Glicemia nella norma"]
+    },
+    {
+      "id": "holdout_ocr_02",
+      "template": "D0TT. {m}\nTEL. {t}\nEsame obiettivo negativo.",
+      "entities": [
+        {"placeholder": "m", "value": "Ivano Basile", "type": "MEDICO"},
+        {"placeholder": "t", "value": "335.6041827", "type": "CONTATTO"}
+      ],
+      "must_preserve": ["Esame obiettivo negativo"]
+    },
+    {
+      "id": "holdout_ocr_03",
+      "template": "ASSISTIT0 {p}\nCARTELLA {d}\nPCR non elevata.",
+      "entities": [
+        {"placeholder": "p", "value": "Lucrezia Coppola", "type": "PAZIENTE"},
+        {"placeholder": "d", "value": "CA-582197", "type": "IDENTIFICATIVO_DOCUMENTO"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["PCR non elevata"]
+    },
+    {
+      "id": "holdout_ocr_04",
+      "template": "Eseguito c/o {s}\nData {data}\nEsito nei limiti.",
+      "entities": [
+        {"placeholder": "s", "value": "IRCCS Monte Chiaro", "type": "STRUTTURA"},
+        {"placeholder": "data", "value": "6/7/2025", "type": "DATA_CLINICA"}
+      ],
+      "must_preserve": ["Esito nei limiti"]
+    },
+    {
+      "id": "holdout_ocr_05",
+      "template": "Pz {p} - ceII. {t}\nECG sinusale.",
+      "entities": [
+        {"placeholder": "p", "value": "Ettore Farina", "type": "PAZIENTE"},
+        {"placeholder": "t", "value": "+39 339 4185076", "type": "CONTATTO"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["ECG sinusale"]
+    },
+    {
+      "id": "holdout_ocr_06",
+      "template": "Dr.ssa {m}\nAcc. n. {d}\nTSH regolare.",
+      "entities": [
+        {"placeholder": "m", "value": "Lidia Orlando", "type": "MEDICO"},
+        {"placeholder": "d", "value": "TSH-471086", "type": "IDENTIFICATIVO_DOCUMENTO"}
+      ],
+      "must_preserve": ["TSH regolare"]
+    },
+    {
+      "id": "holdout_multilinea_01",
+      "template": "DATI ASSISTITO\n{p}\n{cf}\n\nEsame urine negativo.",
+      "entities": [
+        {"placeholder": "p", "value": "Ginevra Sanna", "type": "PAZIENTE"},
+        {"placeholder": "cf", "value": "SNNGVR88S54B354R", "type": "CODICE_FISCALE"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["Esame urine negativo"]
+    },
+    {
+      "id": "holdout_multilinea_02",
+      "template": "REFERENTE\n{m}\n{e}\n\nConclusioni non definitive.",
+      "entities": [
+        {"placeholder": "m", "value": "Dott.ssa Tea Marini", "type": "MEDICO"},
+        {"placeholder": "e", "value": "tea.marini@invalid.example", "type": "CONTATTO"}
+      ],
+      "must_preserve": ["Conclusioni non definitive"]
+    },
+    {
+      "id": "holdout_multilinea_03",
+      "template": "{s}\n{a}\nTel {t}\n\nEmocromo regolare.",
+      "entities": [
+        {"placeholder": "s", "value": "Poliambulatorio Luna", "type": "STRUTTURA"},
+        {"placeholder": "a", "value": "Corso delle Acacie 81", "type": "INDIRIZZO"},
+        {"placeholder": "t", "value": "321 7506184", "type": "CONTATTO"}
+      ],
+      "must_preserve": ["Emocromo regolare"]
+    },
+    {
+      "id": "holdout_multilinea_04",
+      "template": "Paziente {p}\nData {data}\nProtocollo {d}\n\nNessun reperto urgente.",
+      "entities": [
+        {"placeholder": "p", "value": "Rocco Bellomo", "type": "PAZIENTE"},
+        {"placeholder": "data", "value": "19/08/2025", "type": "DATA_CLINICA"},
+        {"placeholder": "d", "value": "PT-360975", "type": "IDENTIFICATIVO_DOCUMENTO"}
+      ],
+      "profile_placeholder": "p",
+      "must_preserve": ["Nessun reperto urgente"]
+    }
+  ],
+  "negative_cases": [
+    "Scala di Glasgow 15, pupille isocoriche e reagenti.",
+    "Segno di Murphy assente; addome trattabile.",
+    "Morbo di Crohn in remissione clinica.",
+    "Malattia di Parkinson in terapia stabile.",
+    "Punteggio di Wells pari a 1.",
+    "Classificazione di Child-Pugh: classe A.",
+    "Test di Coombs diretto negativo.",
+    "Manovra di Lasègue negativa bilateralmente.",
+    "Indice di Barthel 95 su 100.",
+    "Scala di Braden: rischio basso.",
+    "Protocollo FAST negativo all'ecografia.",
+    "Terapia secondo schema FOLFOX, ciclo 4.",
+    "Stadio NYHA II senza edemi declivi.",
+    "GCS E4 V5 M6; paziente vigile e collaborante.",
+    "Antigene CA 19-9 nei limiti.",
+    "Vitamina D 22 ng/mL e PTH 48 pg/mL.",
+    "Pressione 118/72 mmHg, FC 64 bpm.",
+    "eGFR CKD-EPI 79 mL/min/1,73 m².",
+    "T-score femorale -1,1; Z-score -0,3.",
+    "Dose totale 1.000 UI/die per dodici settimane.",
+    "Ecografia secondo metodo Simpson: FE 58%.",
+    "Criteri di Roma IV non pienamente soddisfatti.",
+    "Score CHA2DS2-VASc pari a 2.",
+    "Nessun segno di allarme clinico al controllo odierno."
+  ]
+}

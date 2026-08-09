@@ -1,6 +1,6 @@
 # Pseudonimizzazione del secondo parere
 
-Stato: fasi 1-6 implementate e validate su corpus sintetico
+Stato: fasi 1-7 implementate; sviluppo validato e baseline holdout registrata
 
 Ambito: funzionalita' **Secondo parere**
 
@@ -11,9 +11,10 @@ Sono implementati il motore reversibile, i recognizer AHIA, l'adapter Presidio
 italiano opzionale, i token opachi, la conferma vincolata all'impronta, la
 segnalazione manuale per la richiesta corrente e la reidratazione dei percorsi
 diretto e manuale. Sono inoltre disponibili regole personali cifrate,
-modificabili e cancellabili, export locale sanitizzato e un benchmark CC0 di
-180 casi con metriche per tipo. Restano il collaudo end-to-end con i fornitori
-esterni, l'hardening multiutente e il rilascio graduale.
+modificabili e cancellabili, export locale sanitizzato, un benchmark CC0 di
+sviluppo da 180 casi e un holdout indipendente CC0 da 80 casi. Il confine
+provider è coperto da test simulati e da uno smoke test Ollama locale. Restano
+l'hardening multiutente, il confronto con altri provider e il rilascio graduale.
 
 ## 1. Obiettivo
 
@@ -231,6 +232,12 @@ Regole di fusione:
 - i falsi positivi che eliminerebbero informazione clinica devono poter essere
   deselezionati dall'utente prima dell'invio.
 
+La deselezione è implementata come allowlist della sola sessione: il valore
+viene mostrato soltanto dopo una scelta esplicita, il token e la relativa voce
+della mappa vengono eliminati e il valore esatto viene escluso dalle scansioni
+successive di quella richiesta. Varianti o valori modificati sono analizzati di
+nuovo. La scelta non viene persistita e scompare insieme alla mappa.
+
 ## 8. Segnalazione di PII non rilevata
 
 L'anteprima deve offrire il comando **Segnala un dato non rilevato**.
@@ -422,6 +429,11 @@ La scelta corrente e' quindi un corpus AHIA CC0 interamente sintetico, con
 provenienza e generazione verificabili. Un futuro test E3C potra' essere
 scaricato separatamente e usato soltanto per i falsi positivi clinici.
 
+Il corpus di sviluppo da 180 casi è affiancato dal corpus holdout congelato da
+80 casi. Il risultato del primo run, compresi i limiti emersi senza successivo
+tuning sullo stesso insieme, è in
+[`VALIDAZIONE_PII_HOLDOUT.md`](VALIDAZIONE_PII_HOLDOUT.md).
+
 ## 14. Decisioni rinviate
 
 Richiedono una decisione durante le fasi successive:
@@ -443,11 +455,11 @@ Richiedono una decisione durante le fasi successive:
    positivi clinici.
 6. Regole personali cifrate, isolate per utente, modificabili, disattivabili e
    cancellabili; export sanitizzato con anteprima e consenso.
+7. Revisione dei falsi positivi, holdout indipendente, test end-to-end con
+   provider simulato e smoke test Ollama locale.
 
 ### Prossime fasi
 
-7. Test end-to-end con provider simulati e verifica della conservazione dei
-   token sui modelli esterni supportati.
 8. Audit di log, isolamento multiutente, ciclo di vita della mappa e test su
    token alterati.
 9. Pilot controllato, revisione UX, metriche locali senza contenuto clinico e

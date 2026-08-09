@@ -191,7 +191,10 @@ modelli riducendo l'esposizione degli identificatori riconosciuti.
    non indica se rappresenta un paziente, un medico o una struttura.
 4. **Rileggi il payload.** Se noti un dato sfuggito, usa **Segnala un dato non
    rilevato** e scegli le occorrenze. Puoi limitarlo alla richiesta oppure
-   ricordarlo come regola cifrata per questo utente.
+   ricordarlo come regola cifrata per questo utente. Se invece AHIA ha protetto
+   per errore un termine clinico, apri **Rivedi possibili falsi positivi**,
+   scegli esplicitamente di mostrare i valori e ripristina soltanto quello
+   errato: l'eccezione vale per questa richiesta e non viene salvata.
 5. Conferma l'esatto testo mostrato. Qualsiasi modifica o nuova sostituzione
    invalida la conferma e richiede una nuova lettura.
 6. Copia o scarica il payload, oppure invialo direttamente se hai configurato

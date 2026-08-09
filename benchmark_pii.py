@@ -6,6 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import re
 from typing import Callable, Iterable
 
 import presidio_ahia
@@ -15,6 +16,10 @@ import pseudonimizzazione as pseudo
 CORPUS_PREDEFINITO = (
     Path(__file__).parent / "tests" / "fixtures" /
     "pseudonimizzazione_benchmark.json"
+)
+CORPUS_HOLDOUT = (
+    Path(__file__).parent / "tests" / "fixtures" /
+    "pseudonimizzazione_holdout.json"
 )
 
 
@@ -52,17 +57,58 @@ def carica_corpus(path: Path = CORPUS_PREDEFINITO
                 must_preserve=tuple(gruppo.get("must_preserve", [])),
                 profilo=profilo,
             ))
-    for indice, testo in enumerate(sorgente["negative_cases"], 1):
+
+    for caso in sorgente.get("explicit_cases", []):
+        entita = {e["placeholder"]: e for e in caso["entities"]}
+        annotazioni: list[Annotazione] = []
+        parti: list[str] = []
+        cursore = 0
+        lunghezza = 0
+        for match in re.finditer(r"\{([a-zA-Z0-9_]+)\}", caso["template"]):
+            nome = match.group(1)
+            if nome not in entita:
+                raise ValueError(
+                    f"Placeholder {{{nome}}} senza entita nel caso {caso['id']}")
+            prefisso = caso["template"][cursore:match.start()]
+            parti.append(prefisso)
+            lunghezza += len(prefisso)
+            definizione = entita[nome]
+            valore = definizione["value"]
+            inizio = lunghezza
+            parti.append(valore)
+            lunghezza += len(valore)
+            annotazioni.append(Annotazione(
+                inizio, lunghezza, definizione["type"], valore))
+            cursore = match.end()
+        parti.append(caso["template"][cursore:])
+        testo = "".join(parti)
+        profilo = caso.get("profile")
+        if segnaposto_profilo := caso.get("profile_placeholder"):
+            profilo = {"nome": entita[segnaposto_profilo]["value"]}
         casi.append(CasoBenchmark(
-            id=f"negativo_{indice:02d}", testo=testo, annotazioni=(),
+            id=caso["id"], testo=testo,
+            annotazioni=tuple(annotazioni),
+            must_preserve=tuple(caso.get("must_preserve", [])),
+            profilo=profilo,
+        ))
+
+    prefisso_negativi = (
+        "holdout_negativo" if sorgente.get("kind") == "holdout"
+        else "negativo")
+    for indice, testo in enumerate(sorgente.get("negative_cases", []), 1):
+        casi.append(CasoBenchmark(
+            id=f"{prefisso_negativi}_{indice:02d}", testo=testo,
+            annotazioni=(),
             must_preserve=(testo,), profilo=None,
         ))
     if len(casi) != int(sorgente["target_cases"]):
         raise ValueError(
             f"Corpus incompleto: attesi {sorgente['target_cases']}, "
             f"trovati {len(casi)}")
-    metadata = {chiave: sorgente[chiave] for chiave in
-                ("version", "license", "provenance", "target_cases")}
+    metadata = {
+        chiave: valore for chiave, valore in sorgente.items()
+        if chiave not in {"groups", "explicit_cases", "negative_cases"}
+    }
     return metadata, casi
 
 

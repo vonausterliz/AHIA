@@ -47,12 +47,17 @@ class SessionePseudonimi:
     token_a_valore: dict[str, str] = field(default_factory=dict)
     token_a_tipo: dict[str, str] = field(default_factory=dict)
     valore_a_token: dict[str, str] = field(default_factory=dict)
+    # Valori che l'utente ha classificato come falsi positivi per la sola
+    # richiesta corrente. Contiene esclusivamente forme normalizzate e resta in
+    # memoria insieme alla mappa dei token.
+    valori_consentiti: set[str] = field(default_factory=set)
     impronta_payload: str = ""
 
     def dimentica(self) -> None:
         self.token_a_valore.clear()
         self.token_a_tipo.clear()
         self.valore_a_token.clear()
+        self.valori_consentiti.clear()
         self.impronta_payload = ""
 
 
@@ -69,6 +74,13 @@ class EsitoReidratazione:
     testo: str
     token_sconosciuti: list[str] = field(default_factory=list)
     token_malformati: list[str] = field(default_factory=list)
+
+
+@dataclass
+class EsitoRipristino:
+    testo: str
+    token_ripristinati: list[str] = field(default_factory=list)
+    token_sconosciuti: list[str] = field(default_factory=list)
 
 
 def impronta(testo: str) -> str:
@@ -189,6 +201,45 @@ def reidrata(testo: str, sessione: SessionePseudonimi) -> EsitoReidratazione:
     malformati = sorted({token for token in TOKEN_SIMILE_RE.findall(testo)
                          if not TOKEN_RE.fullmatch(token)})
     return EsitoReidratazione(risultato, sorted(sconosciuti), malformati)
+
+
+def ripristina_falsi_positivi(
+        testo: str, sessione: SessionePseudonimi,
+        token: Iterable[str]) -> EsitoRipristino:
+    """Ripristina token scelti e ignora quel valore solo nella richiesta.
+
+    La mappa relativa ai token ripristinati viene eliminata immediatamente. Un
+    valore modificato o una sua variante resta quindi soggetto alla scansione.
+    """
+    risultato = testo
+    ripristinati: list[str] = []
+    sconosciuti: list[str] = []
+    for corrente in dict.fromkeys(token):
+        valore = sessione.token_a_valore.get(corrente)
+        if valore is None:
+            sconosciuti.append(corrente)
+            continue
+        risultato = risultato.replace(corrente, valore)
+        sessione.valori_consentiti.add(_normalizza_valore(valore))
+        sessione.token_a_valore.pop(corrente, None)
+        sessione.token_a_tipo.pop(corrente, None)
+        chiave = _normalizza_valore(valore)
+        if sessione.valore_a_token.get(chiave) == corrente:
+            sessione.valore_a_token.pop(chiave, None)
+        ripristinati.append(corrente)
+    sessione.impronta_payload = impronta(risultato)
+    return EsitoRipristino(risultato, ripristinati, sconosciuti)
+
+
+def filtra_falsi_positivi(
+        testo: str, entita: Iterable[Entita],
+        sessione: SessionePseudonimi) -> list[Entita]:
+    """Esclude solo gli span uguali ai valori accettati nella sessione."""
+    return [
+        corrente for corrente in entita
+        if _normalizza_valore(testo[corrente.start:corrente.end])
+        not in sessione.valori_consentiti
+    ]
 
 
 def verifica_payload(testo: str, sessione: SessionePseudonimi) -> list[str]:
@@ -361,7 +412,7 @@ def rileva_legacy(testo: str) -> list[Entita]:
     return risultati
 
 
-ISTRUZIONI_TOKEN = """Le sequenze nel formato [[XXXXXXXXXXXXXXXXXXXXXXXX]] sono
-token opachi. Copiale esattamente quando devi citarle: non modificarle, non
-tradurle, non spezzarle e non crearne di nuove. Non tentare di dedurre che cosa
-rappresentano."""
+ISTRUZIONI_TOKEN = """Le sequenze delimitate da doppie parentesi quadre e
+composte da 24 cifre esadecimali sono token opachi. Copiale esattamente quando
+devi citarle: non modificarle, non tradurle, non spezzarle e non crearne di
+nuove. Non tentare di dedurre che cosa rappresentano."""

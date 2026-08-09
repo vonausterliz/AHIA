@@ -1645,6 +1645,9 @@ with tabs[5]:
         if "quesito_esterno_prossimo" in st.session_state:
             st.session_state["quesito_esterno"] = st.session_state.pop(
                 "quesito_esterno_prossimo")
+        if st.session_state.pop("pii_reset_falsi_positivi", False):
+            st.session_state.pop("pii_falso_positivo_scelte", None)
+            st.session_state.pop("pii_falso_positivo_mostra", None)
         testo = st.text_area("quesito", height=420,
                              label_visibility="collapsed", key="quesito_esterno")
 
@@ -1664,10 +1667,58 @@ with tabs[5]:
                 for tipo_locale, numero in sorted(riepilogo_tipi.items()):
                     st.write(f"- {tipo_locale.replace('_', ' ').title()}: {numero}")
 
+        token_presenti = [
+            token for token in sessione_pseudo.token_a_valore
+            if token in testo
+        ]
+        if token_presenti:
+            with st.expander("Rivedi possibili falsi positivi",
+                             icon=":material/rule:"):
+                st.caption("Puoi ripristinare un valore che non è una PII. "
+                           "AHIA lo ignorerà soltanto in questa richiesta; la "
+                           "scelta non viene salvata né inviata al modello.")
+                mostra_falsi_positivi = st.checkbox(
+                    "Mostra i valori rilevati in chiaro su questo schermo",
+                    key="pii_falso_positivo_mostra")
+                if mostra_falsi_positivi:
+                    st.warning("Ripristina soltanto termini clinici o altri "
+                               "falsi positivi: il valore tornerà nel payload "
+                               "destinato al servizio esterno.")
+                    selezionati_fp = st.multiselect(
+                        "Valori da mantenere in chiaro",
+                        token_presenti,
+                        format_func=lambda token: (
+                            f"{sessione_pseudo.token_a_tipo[token].replace('_', ' ').title()}"
+                            f" · {sessione_pseudo.token_a_valore[token]}"),
+                        key="pii_falso_positivo_scelte")
+                    if st.button(
+                            "Ripristina i valori selezionati",
+                            icon=":material/undo:", disabled=not selezionati_fp,
+                            key="btn_ripristina_falsi_positivi"):
+                        ripristino = pseudo.ripristina_falsi_positivi(
+                            testo, sessione_pseudo, selezionati_fp)
+                        st.session_state["quesito_esterno_prossimo"] = (
+                            ripristino.testo)
+                        st.session_state["parere_sessione_pseudo"] = (
+                            sessione_pseudo)
+                        st.session_state["parere_hash_confermato"] = None
+                        st.session_state.pop("parere_risposta", None)
+                        st.session_state["pii_reset_falsi_positivi"] = True
+                        st.rerun()
+                else:
+                    st.caption("I valori originali non vengono inviati al "
+                               "browser finché non scegli di mostrarli.")
+        if sessione_pseudo.valori_consentiti:
+            st.info(":material/check_circle: "
+                    f"{len(sessione_pseudo.valori_consentiti)} valori "
+                    "classificati come falsi positivi in questa richiesta.")
+
         # La scansione e' ripetuta sull'esatto testo dell'editor. Se trova nuovi
         # intervalli, li mostra e richiede un gesto separato per sostituirli.
         rilevate_finali, stato_scansione = presidio_ahia.rileva(
             testo, profilo_parere, valori_regole_attive)
+        rilevate_finali = pseudo.filtra_falsi_positivi(
+            testo, rilevate_finali, sessione_pseudo)
         residue = pseudo.risolvi_sovrapposizioni(testo, rilevate_finali)
         avvisi_payload = list(st.session_state.get("parere_avvisi_pseudo", []))
         avvisi_payload.extend(pseudo.verifica_payload(testo, sessione_pseudo))
@@ -1983,6 +2034,8 @@ with tabs[5]:
                 hash_invio = pseudo.impronta(testo)
                 finali, stato_finale = presidio_ahia.rileva(
                     testo, profilo_parere, valori_regole_attive)
+                finali = pseudo.filtra_falsi_positivi(
+                    testo, finali, sessione_pseudo)
                 residui_finali = pseudo.risolvi_sovrapposizioni(testo, finali)
                 errori_finali = pseudo.verifica_payload(testo, sessione_pseudo)
                 if (hash_invio != st.session_state.get(

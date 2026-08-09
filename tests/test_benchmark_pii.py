@@ -36,6 +36,27 @@ class BenchmarkPIITest(unittest.TestCase):
         self.assertEqual(rapporto["errori_preservazione"], 0)
         self.assertEqual(rapporto["errori_round_trip"], 0)
 
+    def test_holdout_e_congelato_indipendente_e_con_offset_validi(self):
+        metadata, holdout = benchmark_pii.carica_corpus(
+            benchmark_pii.CORPUS_HOLDOUT)
+        _, sviluppo = benchmark_pii.carica_corpus()
+        self.assertEqual(metadata["kind"], "holdout")
+        self.assertTrue(metadata["frozen"])
+        self.assertEqual(len(holdout), metadata["target_cases"])
+        self.assertFalse({c.id for c in holdout} & {c.id for c in sviluppo})
+        self.assertFalse({c.testo for c in holdout} &
+                         {c.testo for c in sviluppo})
+        for caso in holdout:
+            for annotazione in caso.annotazioni:
+                self.assertEqual(
+                    caso.testo[annotazione.start:annotazione.end],
+                    annotazione.valore)
+
+    def test_holdout_supporta_casi_con_piu_annotazioni(self):
+        _, casi = benchmark_pii.carica_corpus(benchmark_pii.CORPUS_HOLDOUT)
+        multipli = [caso for caso in casi if len(caso.annotazioni) > 1]
+        self.assertGreaterEqual(len(multipli), 10)
+
 
 if __name__ == "__main__":
     unittest.main()

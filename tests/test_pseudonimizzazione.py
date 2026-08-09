@@ -97,10 +97,12 @@ class MotorePseudonimizzazioneTest(unittest.TestCase):
         esito = ps.pseudonimizza(
             "Mario", [ps.Entita(0, 5, "PERSONA")],
             generatore=lambda: "4" * 24)
+        esito.sessione.valori_consentiti.add("termine clinico")
         esito.sessione.dimentica()
         self.assertEqual(esito.sessione.token_a_valore, {})
         self.assertEqual(esito.sessione.token_a_tipo, {})
         self.assertEqual(esito.sessione.valore_a_token, {})
+        self.assertEqual(esito.sessione.valori_consentiti, set())
         self.assertEqual(esito.sessione.impronta_payload, "")
 
     def test_recognizer_legacy_non_modifica_il_testo(self):
@@ -131,6 +133,45 @@ class MotorePseudonimizzazioneTest(unittest.TestCase):
         self.assertEqual([testo[e.start:e.end] for e in entita],
                          ["Mario", "Mario"])
         self.assertTrue(all(e.fonte == "personale" for e in entita))
+
+    def test_falso_positivo_viene_ripristinato_e_dimenticato_dalla_mappa(self):
+        testo = "Scala di Glasgow 15; controllo stabile."
+        valore = "Glasgow"
+        inizio = testo.index(valore)
+        esito = ps.pseudonimizza(
+            testo, [ps.Entita(inizio, inizio + len(valore), "LOCALITA")],
+            generatore=lambda: "5" * 24)
+        token = "[[555555555555555555555555]]"
+
+        ripristino = ps.ripristina_falsi_positivi(
+            esito.testo, esito.sessione, [token])
+
+        self.assertEqual(ripristino.testo, testo)
+        self.assertEqual(ripristino.token_ripristinati, [token])
+        self.assertNotIn(token, esito.sessione.token_a_valore)
+        self.assertNotIn(token, esito.sessione.token_a_tipo)
+        self.assertEqual(esito.sessione.valore_a_token, {})
+
+    def test_allowlist_filtra_solo_valore_esatto_nella_sessione(self):
+        testo = "Scala di Glasgow 15; visita a Glasgow."
+        sessione = ps.SessionePseudonimi()
+        sessione.valori_consentiti.add("glasgow")
+        primo = testo.index("Glasgow")
+        secondo = testo.rindex("Glasgow")
+        rilevate = [
+            ps.Entita(primo, primo + len("Glasgow"), "LOCALITA"),
+            ps.Entita(secondo, secondo + len("Glasgow"), "LOCALITA"),
+            ps.Entita(0, 5, "ALTRO_PII"),
+        ]
+        filtrate = ps.filtra_falsi_positivi(testo, rilevate, sessione)
+        self.assertEqual([(e.start, e.end) for e in filtrate], [(0, 5)])
+
+    def test_ripristino_di_token_sconosciuto_non_modifica_il_testo(self):
+        sessione = ps.SessionePseudonimi()
+        token = "[[666666666666666666666666]]"
+        esito = ps.ripristina_falsi_positivi(token, sessione, [token])
+        self.assertEqual(esito.testo, token)
+        self.assertEqual(esito.token_sconosciuti, [token])
 
 
 if __name__ == "__main__":

@@ -253,6 +253,24 @@ Il benchmark sintetico completo si esegue con:
 .venv/bin/python tools/benchmark_pii.py --verifica-obiettivi
 ```
 
+Il corpus indipendente, congelato e mai usato per il tuning si esegue
+separatamente:
+
+```bash
+.venv/bin/python tools/benchmark_pii.py --holdout
+```
+
+Il primo risultato e la relativa impronta sono nel
+[rapporto holdout](docs/VALIDAZIONE_PII_HOLDOUT.md). Lo smoke test live del
+confine Ollama si esegue senza dati reali:
+
+```bash
+.venv/bin/python tools/smoke_ollama_pii.py --model qwen3:30b-instruct
+```
+
+La scelta del modello, la licenza e i risultati misurati sulla macchina di
+sviluppo sono nel [rapporto Ollama](docs/VALIDAZIONE_OLLAMA.md).
+
 ---
 
 ## Come funziona
@@ -344,6 +362,8 @@ volta sola, ma non si beneficia delle schede di layout.
 | `presidio_ahia.py` | adapter opzionale per Presidio e NER italiano |
 | `regole_pii.py` | regole personali cifrate ed export sanitizzato |
 | `benchmark_pii.py` | corpus sintetico, metriche e gate di qualità |
+| `secondo_parere_e2e.py` | orchestrazione testabile pseudonimizza/provider/reidrata |
+| `ollama_provider.py` | client minimale per gli smoke test Ollama locali |
 | `riferimenti.py` | intervalli di riferimento e collegamenti alle schede |
 | `utenti.py` | autenticazione, archivi separati, export/import |
 | `segreti.py` | chiavi API cifrate, invio ai modelli di frontiera |

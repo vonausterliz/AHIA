@@ -3,6 +3,27 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.23.0 — 9 agosto 2026
+
+### Validazione e controllo umano della pseudonimizzazione
+
+- **Holdout indipendente.** Aggiunto un secondo corpus CC0 congelato di 80 casi
+  e 78 annotazioni, separato dai dati usati per il tuning. Comprende testi
+  multilinea, rumore OCR simulato, PII multiple e negativi clinici difficili.
+  Il rapporto del primo run è conservato in
+  `docs/VALIDAZIONE_PII_HOLDOUT.md`.
+- **Revisione dei falsi positivi.** Prima dell'invio l'utente può mostrare
+  esplicitamente i valori rilevati e ripristinare quelli classificati
+  erroneamente. L'eccezione vive solo nella richiesta corrente, non viene
+  salvata e ogni modifica invalida la conferma del payload.
+- **Confine provider testabile.** Aggiunti un client Ollama minimale, un flusso
+  end-to-end riusabile e test che verificano assenza delle PII dal payload
+  esterno, conservazione dei token e reidratazione esclusivamente locale.
+  Lo smoke live è passato sia con Mistral Small 3.2 sia con Qwen3 30B Instruct.
+- **Istruzioni token corrette.** L'esempio testuale nelle istruzioni al modello
+  sembrava un token malformato ai controlli finali; ora il formato è descritto
+  senza introdurre sequenze riservate.
+
 ## 1.22.0 — 9 agosto 2026
 
 ### Pseudonimizzazione del secondo parere
