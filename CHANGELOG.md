@@ -3,6 +3,18 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+
+## 1.24.0 — 10 agosto 2026
+
+### Catalogo modelli e interfaccia semplificata
+
+- **Cataloghi aggiornabili su richiesta.** Ollama, OpenAI, Anthropic e OpenRouter sono normalizzati in un catalogo comune. Le chiamate esterne avvengono solo premendo Aggiorna; l’ultima risposta valida resta nella cache locale.
+- **Profili comprensibili.** La scelta predefinita è automatica, con priorità Equilibrato, Più veloce o Massima qualità e quattro ruoli. Le vecchie scelte per-funzione vengono conservate nella modalità Personalizzata.
+- **Navigazione per attività.** Rimossi i selettori globali e le schede orizzontali. Analisi e Chat sono riunite in Assistente; modelli, privacy e diagnostica hanno pagine dedicate.
+- **Secondo parere guidato.** Il flusso è diviso in Prepara, Verifica privacy e Invia e reidrata. Il modello esterno si sceglie nelle impostazioni.
+- **OpenRouter controllato.** L’integrazione usa l’endpoint UE e richiede zero data retention, nessuna raccolta dati e nessun fallback.
+- **Regressioni e smoke test.** Aggiunti test per catalogo, cache, migrazione, ruoli e policy OpenRouter, oltre allo smoke test Streamlit autenticato.
+
 ## 1.23.0 — 9 agosto 2026
 
 ### Validazione e controllo umano della pseudonimizzazione

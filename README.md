@@ -4,8 +4,7 @@
 
 AHIA prende i PDF dei tuoi referti, ne estrae i valori, li mette in serie
 storica e ti lascia ragionarci sopra con un modello linguistico che gira sulla
-tua macchina. Nessun dato lascia il computer: niente servizi esterni, niente
-account, niente telemetria.
+tua macchina. Per impostazione predefinita nessun dato lascia il computer: i modelli ordinari girano in locale e non c’è telemetria. Solo il Secondo parere può inviare un payload pseudonimizzato a un provider esterno, dopo revisione e conferma esplicita.
 
 Nasce come banco di prova per capire cosa un LLM locale sappia realmente fare
 su documenti sanitari. È scritto per referti italiani: virgola decimale,
@@ -125,9 +124,11 @@ quindi l'installazione non compila nulla.
 | `bge-m3` | ricerca per significato, facoltativa | ~1,2 GB |
 | `qwen3:32b` | analisi più accurata, se la macchina lo regge | ~19 GB |
 
-Tutti sono selezionabili singolarmente: si può usare un modello diverso per
-ogni funzione, ed è sensato farlo — l'estrazione deve solo trascrivere una
-tabella, l'analisi deve ragionare.
+In **Impostazioni → Modelli e provider** la modalità automatica assegna i modelli installati a quattro ruoli e offre tre priorità: Equilibrato, Più veloce e Massima qualità. La modalità Personalizzata mantiene la scelta per ruolo e le eccezioni per singola funzione.
+
+OpenAI, Anthropic e OpenRouter espongono il loro elenco aggiornato soltanto su richiesta esplicita. Disponibilità, compatibilità tecnica e validazione clinica restano stati distinti; i dettagli sono in [Configurazione dei modelli](docs/CONFIGURAZIONE_MODELLI.md).
+
+La nuova organizzazione delle pagine e la collocazione delle opzioni sono descritte in [Architettura dell’interfaccia](docs/INTERFACCIA.md).
 
 ### Hardware
 
@@ -241,7 +242,7 @@ installa nel virtualenv il gruppo opzionale e il modello spaCy:
 
 Su Windows sostituisci `.venv/bin/python` con
 `.venv\Scripts\python.exe`. Lo stato effettivo dei motori è mostrato nella
-scheda *Secondo parere*. Le variabili `AHIA_PRESIDIO_MODEL` e
+pagina *Secondo parere*. Le variabili `AHIA_PRESIDIO_MODEL` e
 `AHIA_PRESIDIO_SCORE` cambiano rispettivamente modello e soglia; con
 `AHIA_PRESIDIO_STRICT=1` l'invio diretto è bloccato se Presidio non è attivo.
 Una soglia specifica per entità si imposta, per esempio, con
@@ -351,7 +352,11 @@ volta sola, ma non si beneficia delle schede di layout.
 
 | File | Ruolo |
 |---|---|
-| `app.py` | interfaccia Streamlit, tutte le schede |
+| `app.py` | flussi Streamlit e pagine operative |
+| `ui_navigazione.py` | menu per attività e barra laterale compatta |
+| `ui_impostazioni.py` | modelli, provider, privacy e backup |
+| `catalogo_modelli.py` | cataloghi normalizzati Ollama e provider esterni |
+| `configurazione_modelli.py` | profili, ruoli e migrazione delle scelte storiche |
 | `core.py` | SQLite, profilo, impostazioni, contesto per l'LLM, client Ollama |
 | `ingest.py` | lettura PDF, estrazione, diagnosi e recupero delle estrazioni |
 | `grafici.py` | serie storiche e grafici Altair |
@@ -385,7 +390,7 @@ separato sotto `~/.ahia/archivi/<id>/`:
 | `alias_analiti.json` | dizionario personale delle diciture |
 
 Per il backup basta copiare la cartella, oppure usare l'esportazione in zip
-dalla barra laterale. Se la macchina è condivisa, valuta un filesystem cifrato:
+dalla pagina **Privacy e dati**. Se la macchina è condivisa, valuta un filesystem cifrato:
 il database non è protetto da password.
 
 ---

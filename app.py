@@ -25,6 +25,10 @@ import pandas as pd
 import streamlit as st
 
 import config
+import configurazione_modelli
+import ui_impostazioni
+import ui_diagnostica
+import ui_navigazione
 import core
 import grafici
 import ingest
@@ -37,9 +41,8 @@ import semantica
 import segreti
 import strumenti
 import utenti
-from config import (BRANI_NEL_CONTESTO, DATA_DIR, DISCLAIMER,
-                    DISCLAIMER_VERSIONE, FUNZIONI, MODELLO_EMBEDDING,
-                    OLLAMA_HOST, REPO_URL, TIPI, VERSIONE, e_tabellare,
+from config import (BRANI_NEL_CONTESTO, DISCLAIMER, DISCLAIMER_VERSIONE,
+                    TIPI, e_tabellare,
                     etichetta)
 
 st.set_page_config(page_title="AHIA — referti e andamenti",
@@ -441,179 +444,46 @@ def mostra_risposta(model: str, messaggi: list[dict], funzione: str) -> str:
         return testo
 
 
-# --- Barra laterale --------------------------------------------------------
+# --- Navigazione e stato compatto ------------------------------------------
 
-with st.sidebar:
-    st.title(":material/monitor_heart: AHIA")
-    st.caption(f"Archivio e lettura dei tuoi referti · v{VERSIONE}")
-    modelli = core.modelli_disponibili()
-    if modelli:
-        st.success(f"Ollama attivo — {len(modelli)} modelli")
-    else:
-        st.error(f"Ollama non raggiungibile su {OLLAMA_HOST}")
+def _esci_dalla_sessione():
+    _dimentica_secondo_parere()
+    st.session_state.pop("utente", None)
+    st.session_state.pop("chiave_sessione", None)
+    st.rerun()
 
-    impostazioni = core.leggi_impostazioni(conn)
-    scelti: dict[str, str] = {}
-    with st.expander("Modelli per funzione", icon=":material/tune:", expanded=True):
-        for chiave, cfg in FUNZIONI.items():
-            salvato = impostazioni.get(f"modello.{chiave}", cfg["default"])
-            if modelli:
-                opzioni = modelli if salvato in modelli else [salvato, *modelli]
-                valore = st.selectbox(cfg["label"], opzioni, opzioni.index(salvato),
-                                      help=cfg["aiuto"], key=f"mod_{chiave}")
-            else:
-                valore = st.text_input(cfg["label"], salvato, help=cfg["aiuto"],
-                                       key=f"mod_{chiave}")
-            if valore != salvato:
-                core.salva_impostazione(conn, f"modello.{chiave}", valore)
-            if cfg["think"]:
-                st.caption(":material/psychology: ragionamento attivo")
-            if modelli and valore not in modelli:
-                st.caption(":material/warning: non installato")
-                if st.button(f"Scarica {valore}", key=f"pull_{chiave}",
-                             icon=":material/download:", width="stretch"):
-                    barra = st.progress(0.0, text="avvio del download…")
-                    try:
-                        for stato in core.scarica_modello(valore):
-                            tot = stato.get("total") or 0
-                            fatto = stato.get("completed") or 0
-                            etichetta = stato.get("status", "")
-                            if tot:
-                                etichetta += f" — {fatto / tot:.0%} di {tot / 1e9:.1f} GB"
-                            barra.progress(min(fatto / tot, 1.0) if tot else 0.0,
-                                           text=etichetta)
-                        st.success(f"{valore} scaricato.")
-                        st.rerun()
-                    except core.ErroreOllama as e:
-                        st.error(str(e))
-            scelti[chiave] = valore
 
-    disponibili = core.numero_prelievi(conn)
-    with st.expander("Ricerca semantica", icon=":material/manage_search:"):
-        emb_salvato = impostazioni.get("modello.embedding", MODELLO_EMBEDDING)
-        if modelli:
-            opzioni_e = modelli if emb_salvato in modelli else [emb_salvato, *modelli]
-            emb = st.selectbox("Modello di embedding", opzioni_e,
-                               opzioni_e.index(emb_salvato),
-                               help="Multilingue: bge-m3 e' il piu' affidabile "
-                                    "sull'italiano medico. I valori di laboratorio "
-                                    "non vengono vettorizzati: restano in SQL.")
-        else:
-            emb = st.text_input("Modello di embedding", emb_salvato)
-        if emb != emb_salvato:
-            core.salva_impostazione(conn, "modello.embedding", emb)
-        if modelli and emb not in modelli:
-            st.caption(":material/warning: non installato")
+pagina, impostazioni, scelti, emb, nuovo_tool, n_referti, modelli = ui_navigazione.costruisci(
+    conn, utente_corrente, e_admin,
+    esci=_esci_dalla_sessione,
+    mostra_avvertenza=lambda: avvertenza(bloccante=False),
+)
 
-        indicizzati, frammenti = semantica.stato(conn, emb)
-        con_testo, totali = core.documenti_indicizzati(conn)
-        st.caption(f"{con_testo}/{totali} documenti con testo · "
-                   f"{indicizzati} indicizzati ({frammenti} frammenti)")
 
-        mancanti = semantica.da_indicizzare(conn, emb)
-        if mancanti and st.button(f"Indicizza {len(mancanti)} documenti",
-                                  icon=":material/database:", width="stretch", key="btn_indicizza_documenti_308"):
-            avanzamento = st.progress(0.0)
-            try:
-                for i, r in enumerate(mancanti, 1):
-                    semantica.indicizza(conn, r["sha256"], r["testo"], emb)
-                    avanzamento.progress(i / len(mancanti), text=r["nome_file"])
-                st.success("Indice aggiornato.")
-                st.rerun()
-            except core.ErroreOllama as e:
-                st.error(str(e))
-        elif not mancanti and con_testo:
-            st.caption(":material/check_circle: indice allineato")
+if pagina == "home":
+    st.title("Il tuo archivio sanitario, in locale")
+    st.caption("Le attività più frequenti sono qui; configurazione e diagnostica restano separate.")
+    n_documenti = len(core.elenco_documenti(conn))
+    n_prelievi = core.numero_prelievi(conn)
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Referti", n_documenti)
+    c2.metric("Prelievi", n_prelievi)
+    c3.metric("Modello analisi", scelti["analisi"])
+    st.markdown("### Da dove vuoi iniziare?")
+    st.info("Usa il menu a sinistra: **Referti** per caricare o consultare, **Andamenti** per i valori nel tempo, **Assistente** per leggere e discutere i dati, **Secondo parere** per preparare un invio pseudonimizzato.")
+    recenti = core.elenco_documenti(conn)[:5]
+    if recenti:
+        st.markdown("### Referti recenti")
+        st.dataframe(pd.DataFrame([{
+            "Data": r["data_documento"] or "",
+            "Tipo": etichetta(r["tipo"]),
+            "Titolo": r["titolo"] or r["nome_file"],
+        } for r in recenti]), hide_index=True, width="stretch")
 
-    tool_attivi = impostazioni.get("chat.strumenti", "1") == "1"
-    nuovo_tool = st.toggle("Strumenti nella chat", tool_attivi,
-                           help="Il modello puo' interrogare l'archivio (serie "
-                                "storiche, conteggi, ricerca nei referti) invece "
-                                "di rispondere solo con cio' che vede nel "
-                                "contesto. Piu' preciso ma piu' lento, e richiede "
-                                "un modello che supporti i tool.")
-    if nuovo_tool != tool_attivi:
-        core.salva_impostazione(conn, "chat.strumenti", "1" if nuovo_tool else "0")
-        st.rerun()
-
-    n_default = int(impostazioni.get("contesto.n_referti", 4))
-    if disponibili > 1:
-        massimo = max(disponibili, n_default)
-        n_referti = st.slider(f"Referti nel contesto (ne hai {disponibili})",
-                              1, massimo, min(n_default, massimo))
-        if n_referti != n_default:
-            core.salva_impostazione(conn, "contesto.n_referti", str(n_referti))
-    else:
-        n_referti = n_default
-
-    # Ollama tronca il prompt senza avvisare se supera num_ctx
-    token = core.stima_token(core.costruisci_contesto(conn, n_referti))
-    ctx_min = min(FUNZIONI[f]["num_ctx"] for f in ("analisi", "chat"))
-    quota = token / ctx_min
-    if quota > 0.6:
-        st.warning(f"Contesto ~{token:,} token su {ctx_min:,} disponibili. "
-                   "Riduci i referti o alza `num_ctx` in config.py, "
-                   "altrimenti Ollama tronca il prompt senza avvisare.".replace(",", "."))
-    else:
-        st.caption(f"Contesto ~{token:,} token ({quota:.0%} di {ctx_min:,})"
-                   .replace(",", "."))
-
-    c1, c2 = st.columns([2, 1])
-    c1.caption(f":material/account_circle: **{utente_corrente['nome_utente']}**"
-               + (" · amministratore" if e_admin else ""))
-    if c2.button("Esci", icon=":material/logout:", width="stretch", key="btn_esci_358"):
-        _dimentica_secondo_parere()
-        st.session_state.pop("utente", None)
-        st.session_state.pop("chiave_sessione", None)
-        st.rerun()
-
-    st.caption(f"Dati in `{DATA_DIR}` — nulla lascia questa macchina.")
-
-    with st.expander("I miei dati", icon=":material/database:"):
-        st.caption("Esporta tutto il tuo archivio in un file zip: referti, "
-                   "valori, profilo, dizionario. Serve da backup e per spostarti "
-                   "su un'altra installazione.")
-        zip_dati = utenti.esporta_archivio(utente_corrente["id"])
-        if zip_dati:
-            import datetime as _dt
-            st.download_button(
-                "Esporta il mio archivio (zip)", zip_dati,
-                f"ahia_{utente_corrente['nome_utente']}_"
-                f"{_dt.date.today().isoformat()}.zip",
-                mime="application/zip", icon=":material/download:",
-                width="stretch", key="btn_esporta_mio")
-        else:
-            st.caption("Nessun dato da esportare per ora.")
-        st.caption("Per ripristinarlo su un'altra macchina, scompatta lo zip "
-                   "nella cartella dell'utente, sotto `archivi/`.")
-
-    if st.button("Avvertenza e limiti d'uso", icon=":material/info:",
-                 width="stretch", key="btn_avvertenza_e_limiti_d_uso_363"):
-        avvertenza(bloccante=False)
-    st.caption("Strumento sperimentale, non un dispositivo medico. "
-               "Non sostituisce il parere del medico.")
-    st.caption(f"AGPL-3.0 · [codice sorgente]({REPO_URL})")
-
-etichette_schede = [
-    ":material/badge: Profilo",
-    ":material/lab_panel: Referti",
-    ":material/trending_up: Andamento analiti",
-    ":material/insights: Analisi",
-    ":material/forum: Chat",
-    ":material/share: Secondo parere",
-    ":material/menu_book: Dizionario",
-    ":material/monitoring: Diagnostica",
-    ":material/help: Guida",
-]
-if e_admin:
-    etichette_schede.append(":material/group: Utenti")
-tabs = st.tabs(etichette_schede)
-IDX_DIAGNOSTICA = 7
-IDX_GUIDA = 8
 
 # --- Profilo ---------------------------------------------------------------
 
-with tabs[0]:
+if pagina == "profilo":
     st.subheader("Profilo")
     st.caption("Contestualizza i valori: range e rilevanza di uno scostamento "
                "dipendono da eta' e sesso.")
@@ -656,7 +526,7 @@ with tabs[0]:
 
 # --- Referti ---------------------------------------------------------------
 
-with tabs[1]:
+if pagina == "referti":
     st.subheader("Caricamento referti")
     st.caption(f"`{scelti['estrazione_testo']}` per i PDF nativi, "
                f"`{scelti['estrazione_vision']}` per le scansioni.")
@@ -864,14 +734,13 @@ with tabs[1]:
         else:
             try:
                 brani = semantica.cerca(conn, domanda, 5,
-                                        impostazioni.get("modello.embedding",
-                                                         MODELLO_EMBEDDING))
+                                        emb)
             except core.ErroreOllama as e:
                 st.error(str(e))
                 brani = []
             if not brani:
                 st.info("Nessun risultato: forse l'indice semantico non e' ancora "
-                        "stato costruito (barra laterale).")
+                        "stato costruito in Impostazioni → Modelli e provider.")
             for b in brani:
                 testa = etichetta(b["tipo"]) if b["tipo"] else "Documento"
                 st.markdown(f"**{testa}** · {b['data'] or 'senza data'} · "
@@ -1017,40 +886,10 @@ with tabs[1]:
             else:
                 st.caption("Nessun valore di laboratorio in archivio.")
 
-    st.divider()
-    st.subheader("Log")
-
-    with st.expander("Registro dell'ultima elaborazione",
-                     icon=":material/receipt_long:",
-                     expanded=False):
-        if not st.session_state.get("registro"):
-            st.caption("Nessuna elaborazione in questa sessione.")
-        for nome_file, righe in st.session_state.get("registro", []):
-            st.markdown(f"**{nome_file}**")
-            for r in righe:
-                st.markdown(r)
-
-    with st.expander("Metriche dell'ultima elaborazione", icon=":material/speed:",
-                     expanded=bool(st.session_state.get("log"))):
-        if not st.session_state.get("log"):
-            st.caption("Nessuna elaborazione in questa sessione.")
-        else:
-            st.dataframe(pd.DataFrame(st.session_state["log"]),
-                         width="stretch", hide_index=True)
-            st.caption("`caricamento_s` alto solo alla prima chiamata e' normale: "
-                       "e' il modello che entra in memoria. `tok_s` bassi con "
-                       "`token_in` molto alti indicano pagine rasterizzate troppo "
-                       "grandi: abbassa DPI_RASTER in config.py.")
-
-    with st.expander("Log del server Ollama", icon=":material/terminal:"):
-        percorso, contenuto = core.log_server()
-        if percorso:
-            st.caption(f"`{percorso}`")
-        st.code(contenuto, language="log")
 
 # --- Andamenti -------------------------------------------------------------
 
-with tabs[2]:
+if pagina == "andamenti":
     st.subheader("Andamento analiti")
     analiti = core.elenco_analiti(conn)
     if not analiti:
@@ -1171,9 +1010,39 @@ with tabs[2]:
                                "serie_storiche.csv", "text/csv",
                                icon=":material/download:", width="stretch")
 
+# --- Assistente -------------------------------------------------------------
+
+if pagina == "assistente":
+    st.subheader("Assistente sui tuoi dati")
+    vista_assistente = st.segmented_control(
+        "Modalità", ["Lettura guidata", "Conversazioni"],
+        default="Lettura guidata", label_visibility="collapsed")
+    with st.popover("Contesto e strumenti", icon=":material/tune:"):
+        disponibili_contesto = max(core.numero_prelievi(conn), 1)
+        nuovo_n = st.slider(
+            "Referti nel contesto", 1, max(disponibili_contesto, n_referti),
+            min(n_referti, max(disponibili_contesto, n_referti)))
+        if nuovo_n != n_referti:
+            core.salva_impostazione(conn, "contesto.n_referti", str(nuovo_n))
+            st.rerun()
+        strumenti_scelti = st.toggle(
+            "Strumenti nelle conversazioni", value=nuovo_tool,
+            help="Permette al modello di interrogare serie, conteggi e referti.")
+        if strumenti_scelti != nuovo_tool:
+            core.salva_impostazione(
+                conn, "chat.strumenti", "1" if strumenti_scelti else "0")
+            st.rerun()
+        token_contesto = core.stima_token(core.costruisci_contesto(conn, n_referti))
+        st.caption(f"Contesto stimato: {token_contesto:,} token".replace(",", "."))
+        ctx_min = min(config.FUNZIONI[f]["num_ctx"] for f in ("analisi", "chat"))
+        if token_contesto / ctx_min > 0.6:
+            st.warning(
+                f"Il contesto usa circa {token_contesto / ctx_min:.0%} della finestra: "
+                "riduci i referti per evitare troncamenti.")
+
 # --- Analisi ---------------------------------------------------------------
 
-with tabs[3]:
+if pagina == "assistente" and vista_assistente == "Lettura guidata":
     st.subheader("Lettura assistita dei referti")
     st.caption(f"Modello in uso: `{scelti['analisi']}`")
     documenti = core.elenco_documenti(conn)
@@ -1198,7 +1067,7 @@ with tabs[3]:
     elif ambito == "Una tipologia":
         c2.info("Nessun documento con tipologia assegnata.")
 
-    emb_scelto = impostazioni.get("modello.embedding", MODELLO_EMBEDDING)
+    emb_scelto = emb
     brani_txt = ""
     if not sha_scelto and not tipo_scelto_an and semantica.stato(conn, emb_scelto)[0]:
         fuori_norma = core.analiti_fuori_range(conn)
@@ -1340,7 +1209,7 @@ with tabs[3]:
 
 # --- Chat ------------------------------------------------------------------
 
-with tabs[4]:
+if pagina == "assistente" and vista_assistente == "Conversazioni":
     st.subheader("Chat sui propri dati")
     st.caption(f"Modello in uso: `{scelti['chat']}`")
 
@@ -1370,7 +1239,7 @@ with tabs[4]:
             core.aggiungi_messaggio(conn, conv_id, "user", domanda)
             with st.chat_message("user"):
                 st.markdown(domanda)
-            emb_chat = impostazioni.get("modello.embedding", MODELLO_EMBEDDING)
+            emb_chat = emb
             brani_chat = ""
             if semantica.stato(conn, emb_chat)[0]:
                 brani_chat = brani_pertinenti(utente_corrente["id"], domanda,
@@ -1421,11 +1290,29 @@ with tabs[4]:
 
 # --- Secondo parere --------------------------------------------------------
 
-with tabs[5]:
+if pagina == "secondo-parere":
     st.subheader("Secondo parere da un modello esterno")
     st.caption("Prepara un quesito pseudonimizzato da sottoporre a un modello "
                "di frontiera. I dati riconosciuti vengono sostituiti in locale "
                "con token opachi e casuali.")
+
+    fase_parere = int(st.session_state.get("parere_fase", 1))
+    nomi_fasi = ["1 · Prepara", "2 · Verifica privacy", "3 · Invia e reidrata"]
+    colonne_fasi = st.columns(3)
+    for indice_fase, nome_fase in enumerate(nomi_fasi, 1):
+        colonne_fasi[indice_fase - 1].markdown(
+            f"**{nome_fase}**" if indice_fase == fase_parere else nome_fase)
+    st.progress(fase_parere / 3)
+    if fase_parere > 1 and st.button(
+            "Modifica ambito", icon=":material/arrow_back:", key="parere_torna_ambito"):
+        _dimentica_secondo_parere()
+        st.session_state["parere_fase"] = 1
+        st.rerun()
+    if fase_parere == 3 and st.button(
+            "Torna alla verifica privacy", icon=":material/arrow_back:",
+            key="parere_torna_privacy"):
+        st.session_state["parere_fase"] = 2
+        st.rerun()
 
     st.error(
         ":material/gpp_maybe: **Nessuna garanzia e nessuna responsabilità.** "
@@ -1445,59 +1332,70 @@ with tabs[5]:
     if not core.numero_prelievi(conn):
         st.info("Carica almeno un referto.")
     else:
-        # Ambito del parere: tutto, categorie selezionate, o un singolo referto.
-        ambito = st.radio(
-            "Cosa includere nel parere",
-            ["Tutti i referti", "Solo alcune categorie", "Un singolo referto"],
-            horizontal=True, key="ambito_parere")
+        if fase_parere == 1:
+            # Ambito del parere: tutto, categorie selezionate, o un singolo referto.
+            ambito = st.radio(
+                "Cosa includere nel parere",
+                ["Tutti i referti", "Solo alcune categorie", "Un singolo referto"],
+                horizontal=True, key="ambito_parere")
 
-        tipi_scelti: list[str] | None = None
-        sha_scelto: str | None = None
-        gruppi_p = core.documenti_per_tipo(conn)
+            tipi_scelti: list[str] | None = None
+            sha_scelto: str | None = None
+            gruppi_p = core.documenti_per_tipo(conn)
 
-        if ambito == "Solo alcune categorie":
-            disponibili = [(t, TIPI[t]["label"]) for t in TIPI if gruppi_p.get(t)]
-            etichette = st.multiselect(
-                "Categorie da includere",
-                [lab for _, lab in disponibili],
-                help="Puoi combinare più categorie: esami del sangue, visite, "
-                     "ecografie…")
-            tipi_scelti = [t for t, lab in disponibili if lab in etichette]
-            if not tipi_scelti:
-                st.info("Seleziona almeno una categoria.")
-        elif ambito == "Un singolo referto":
-            tutti = core.elenco_documenti(conn)
-            # Il selectbox deve ricevere opzioni serializzabili: gli oggetti
-            # sqlite3.Row non lo sono. Passiamo gli sha (stringhe) e teniamo le
-            # descrizioni in un dizionario per format_func.
-            descrizioni = {}
-            for r in tutti:
-                data = core.normalizza_data(r["data_documento"]) or "data ignota"
-                lab = TIPI.get(r["tipo"], {}).get("label", "Referto")
-                chiavi = r.keys()
-                strut = (f" · {r['struttura']}"
-                         if "struttura" in chiavi and r["struttura"] else "")
-                descrizioni[r["sha256"]] = f"{data} — {lab}{strut}"
-            if tutti:
-                sha_scelto = st.selectbox(
-                    "Scegli il referto", list(descrizioni.keys()),
-                    format_func=lambda s: descrizioni.get(s, s),
-                    key="referto_singolo_p")
-            else:
-                st.info("Nessun referto disponibile.")
+            if ambito == "Solo alcune categorie":
+                disponibili = [(t, TIPI[t]["label"]) for t in TIPI if gruppi_p.get(t)]
+                etichette = st.multiselect(
+                    "Categorie da includere",
+                    [lab for _, lab in disponibili],
+                    help="Puoi combinare più categorie: esami del sangue, visite, "
+                         "ecografie…")
+                tipi_scelti = [t for t, lab in disponibili if lab in etichette]
+                if not tipi_scelti:
+                    st.info("Seleziona almeno una categoria.")
+            elif ambito == "Un singolo referto":
+                tutti = core.elenco_documenti(conn)
+                # Il selectbox deve ricevere opzioni serializzabili: gli oggetti
+                # sqlite3.Row non lo sono. Passiamo gli sha (stringhe) e teniamo le
+                # descrizioni in un dizionario per format_func.
+                descrizioni = {}
+                for r in tutti:
+                    data = core.normalizza_data(r["data_documento"]) or "data ignota"
+                    lab = TIPI.get(r["tipo"], {}).get("label", "Referto")
+                    chiavi = r.keys()
+                    strut = (f" · {r['struttura']}"
+                             if "struttura" in chiavi and r["struttura"] else "")
+                    descrizioni[r["sha256"]] = f"{data} — {lab}{strut}"
+                if tutti:
+                    sha_scelto = st.selectbox(
+                        "Scegli il referto", list(descrizioni.keys()),
+                        format_func=lambda s: descrizioni.get(s, s),
+                        key="referto_singolo_p")
+                else:
+                    st.info("Nessun referto disponibile.")
 
-        c1, c2, c3 = st.columns(3)
-        eta_modo = c1.selectbox("Eta'", ["fascia", "esatta", "omessa"],
-                                help="La fascia quinquennale e' clinicamente "
-                                     "sufficiente e meno identificante.")
-        lingua_p = c2.selectbox("Lingua del quesito", ["it", "en"],
-                                format_func=lambda x: "Italiano" if x == "it"
-                                else "English")
-        con_bmi = c3.checkbox("Includi il BMI", value=True)
-        con_note = st.checkbox("Includi terapie e note del profilo", value=False,
-                               help="Testo libero: e' la parte che piu' "
-                                    "facilmente contiene dati identificativi. "
-                                    "Rileggila prima di attivarla.")
+            c1, c2, c3 = st.columns(3)
+            eta_modo = c1.selectbox("Eta'", ["fascia", "esatta", "omessa"],
+                                    help="La fascia quinquennale e' clinicamente "
+                                         "sufficiente e meno identificante.")
+            lingua_p = c2.selectbox("Lingua del quesito", ["it", "en"],
+                                    format_func=lambda x: "Italiano" if x == "it"
+                                    else "English")
+            con_bmi = c3.checkbox("Includi il BMI", value=True)
+            con_note = st.checkbox("Includi terapie e note del profilo", value=False,
+                                   help="Testo libero: e' la parte che piu' "
+                                        "facilmente contiene dati identificativi. "
+                                        "Rileggila prima di attivarla.")
+        else:
+            dati_fase = st.session_state.get("parere_config", {})
+            ambito = dati_fase.get("ambito", "Tutti i referti")
+            tipi_scelti = dati_fase.get("tipi_scelti")
+            sha_scelto = dati_fase.get("sha_scelto")
+            eta_modo = dati_fase.get("eta_modo", "fascia")
+            lingua_p = dati_fase.get("lingua_p", "it")
+            con_bmi = dati_fase.get("con_bmi", True)
+            con_note = dati_fase.get("con_note", False)
+            gruppi_p = core.documenti_per_tipo(conn)
 
         # Costruzione del quadro secondo l'ambito, unendo parte numerica e
         # parte descrittiva quando entrambe sono pertinenti.
@@ -1568,6 +1466,23 @@ with tabs[5]:
             st.rerun()
 
         proposta = parere.componi(quadro, sintesi, lingua_p)
+
+        if fase_parere == 1:
+            st.session_state["parere_config"] = {
+                "ambito": ambito, "tipi_scelti": tipi_scelti,
+                "sha_scelto": sha_scelto, "eta_modo": eta_modo,
+                "lingua_p": lingua_p, "con_bmi": con_bmi, "con_note": con_note,
+            }
+            ambito_valido = bool(quadro.strip())
+            if st.button(
+                    "Prepara e verifica la privacy", type="primary",
+                    icon=":material/arrow_forward:", disabled=not ambito_valido,
+                    key="parere_prepara_privacy"):
+                st.session_state["parere_fase"] = 2
+                st.rerun()
+            if not ambito_valido:
+                st.info("Completa la selezione: non ci sono ancora dati da preparare.")
+            st.stop()
 
         st.divider()
         st.markdown("**Payload pseudonimizzato** — modificalo liberamente e "
@@ -2004,6 +1919,16 @@ with tabs[5]:
                       disabled=True, width="stretch",
                       key="btn_mostra_per_copiarlo_pseudo")
 
+        if fase_parere == 2:
+            if pronto and st.button(
+                    "Continua a invio e reidratazione", type="primary",
+                    icon=":material/arrow_forward:", key="parere_continua_invio"):
+                st.session_state["parere_fase"] = 3
+                st.rerun()
+            elif not pronto:
+                st.info("Risolvi gli avvisi e conferma l’esatto payload per continuare.")
+            st.stop()
+
         # --- Invio diretto a un modello di frontiera ---
         fornitori_pronti = segreti.fornitori_configurati(conn,
                                                          utente_corrente["id"])
@@ -2016,7 +1941,9 @@ with tabs[5]:
         else:
             scelta = st.selectbox(
                 "Invia a", fornitori_pronti,
-                format_func=lambda f: segreti.FORNITORI[f]["nome"],
+                format_func=lambda f: (
+                    f"{segreti.FORNITORI[f]['nome']} · "
+                    f"{impostazioni.get(f'modello.esterno.{f}', segreti.FORNITORI[f]['modello'])}"),
                 key="parere_fornitore")
             pw_sessione = st.session_state.get("chiave_sessione")
             invia_ora = st.button(
@@ -2060,7 +1987,8 @@ with tabs[5]:
                                 f"Invio a {segreti.FORNITORI[scelta]['nome']}…"):
                             try:
                                 risposta_pseudo = segreti.invia(
-                                    scelta, chiave, testo)
+                                    scelta, chiave, testo,
+                                    modello=impostazioni.get(f"modello.esterno.{scelta}") or None)
                                 reidratata = pseudo.reidrata(
                                     risposta_pseudo, sessione_pseudo)
                                 st.session_state["parere_risposta_pseudonima"] = (
@@ -2113,47 +2041,7 @@ with tabs[5]:
                 "risposta_secondo_parere.md", icon=":material/download:",
                 key="btn_scarica_risposta")
 
-        with st.expander("Chiavi API per l'invio diretto",
-                         icon=":material/key:"):
-            st.caption("La chiave viene cifrata con una chiave derivata dalla "
-                       "tua password e salvata nel tuo archivio. Non è leggibile "
-                       "senza la tua password, nemmeno dall'amministratore. "
-                       "Reimpostando la password andrà reinserita.")
-            pw_sessione = st.session_state.get("chiave_sessione")
-            if not pw_sessione:
-                st.warning("Riaccedi per gestire le chiavi: servono la password "
-                           "di sessione per cifrarle.")
-            else:
-                configurati = segreti.fornitori_configurati(
-                    conn, utente_corrente["id"])
-                forn = st.selectbox(
-                    "Fornitore", list(segreti.FORNITORI),
-                    format_func=lambda f: segreti.FORNITORI[f]["nome"]
-                    + ("  ✓ configurata" if f in configurati else ""),
-                    key="gestione_fornitore")
-                cfg = segreti.FORNITORI[forn]
-                st.caption(f"Ottieni una chiave da {cfg['dove_chiave']} · "
-                           f"modello usato: `{cfg['modello']}`")
-                nuova = st.text_input(
-                    f"Chiave {cfg['nome']}", type="password",
-                    placeholder=cfg["prefisso"] + "…", key="input_chiave_api")
-                c1, c2 = st.columns(2)
-                if c1.button("Salva la chiave", icon=":material/save:",
-                             width="stretch", key="btn_salva_chiave"):
-                    if errore := segreti.convalida_formato(forn, nuova):
-                        st.error(errore)
-                    else:
-                        segreti.salva_chiave(conn, utente_corrente["id"],
-                                             pw_sessione, forn, nuova.strip())
-                        st.success(f"Chiave {cfg['nome']} salvata e cifrata.")
-                        st.rerun()
-                if forn in configurati and c2.button(
-                        "Rimuovi", icon=":material/delete:", width="stretch",
-                        key="btn_rimuovi_chiave"):
-                    segreti.elimina_chiave(conn, utente_corrente["id"], forn)
-                    st.rerun()
-                st.caption("Le chiamate consumano il credito del tuo account "
-                           "presso il fornitore, secondo le sue tariffe.")
+        st.info("Configura chiavi e modelli in **Impostazioni → Modelli e provider**.")
 
         with st.expander("Cosa viene escluso", icon=":material/shield:"):
             st.markdown(
@@ -2169,7 +2057,7 @@ with tabs[5]:
 
 # --- Dizionario ------------------------------------------------------------
 
-with tabs[6]:
+if pagina == "dizionario":
     st.subheader("Dizionario degli analiti")
     st.caption("Ogni laboratorio scrive gli esami a modo suo: qui le diciture "
                "diverse vengono ricondotte a un nome unico, altrimenti le serie "
@@ -2308,9 +2196,19 @@ with tabs[6]:
                    "aperto.")
 
 
+# --- Impostazioni ----------------------------------------------------------
+
+if pagina == "modelli":
+    ui_impostazioni.mostra_modelli(
+        conn, utente_corrente, st.session_state.get("chiave_sessione"))
+
+if pagina == "privacy":
+    ui_impostazioni.mostra_privacy(conn, utente_corrente)
+
+
 # --- Guida -----------------------------------------------------------------
 
-with tabs[IDX_GUIDA]:
+if pagina == "guida":
     st.subheader("Guida all'uso")
     manuale = config.DIR_APP / "MANUALE.md"
     if manuale.exists():
@@ -2321,7 +2219,7 @@ with tabs[IDX_GUIDA]:
 
 # --- Diagnostica -----------------------------------------------------------
 
-with tabs[IDX_DIAGNOSTICA]:
+if pagina == "diagnostica":
     st.subheader("Diagnostica")
     st.caption("Osservabilità tecnica dell'app: prestazioni dei modelli, "
                "errori e storico delle tue operazioni. Riguarda solo il tuo "
@@ -2399,6 +2297,8 @@ with tabs[IDX_DIAGNOSTICA]:
             pd.DataFrame(righe).to_csv(index=False).encode(),
             "diagnostica-ahia.csv", "text/csv", icon=":material/download:")
 
+    ui_diagnostica.mostra_log_sessione()
+
     st.divider()
     if st.button("Svuota il registro", icon=":material/delete_sweep:"):
         core.azzera_eventi(conn)
@@ -2408,7 +2308,7 @@ with tabs[IDX_DIAGNOSTICA]:
 # --- Utenti (solo amministratore) ------------------------------------------
 
 if e_admin:
-    with tabs[9]:
+    if pagina == "utenti":
         st.subheader("Gestione utenti")
         st.caption("Chi ha un'utenza abilitata vede l'intero archivio: "
                    "l'autenticazione decide chi entra, non separa i dati.")

@@ -310,6 +310,11 @@ def salva_impostazione(conn, chiave: str, valore: str) -> None:
     conn.commit()
 
 
+def elimina_impostazione(conn, chiave: str) -> None:
+    conn.execute("DELETE FROM impostazioni WHERE chiave = ?", (chiave,))
+    conn.commit()
+
+
 def modello_per(conn, funzione: str) -> str:
     return leggi_impostazioni(conn).get(f"modello.{funzione}",
                                         FUNZIONI[funzione]["default"])

@@ -37,6 +37,13 @@ TIMEOUT_API = 120
 
 # Fornitori supportati: endpoint, modello predefinito, intestazioni.
 FORNITORI = {
+    "openrouter": {
+        "nome": "OpenRouter (instradamento controllato)",
+        "url": "https://eu.openrouter.ai/api/v1/chat/completions",
+        "modello": "anthropic/claude-sonnet-4.5",
+        "dove_chiave": "https://openrouter.ai/settings/keys",
+        "prefisso": "sk-or-",
+    },
     "anthropic": {
         "nome": "Claude (Anthropic)",
         "url": "https://api.anthropic.com/v1/messages",
@@ -207,12 +214,19 @@ def invia(fornitore: str, chiave_api: str, quesito: str,
                    if b.get("type") == "text"]
         return "\n".join(blocchi).strip() or "(risposta vuota)"
 
+    payload = {"model": modello, "max_tokens": 2048,
+               "messages": [{"role": "user", "content": quesito}]}
+    if fornitore == "openrouter":
+        payload["provider"] = {
+            "zdr": True,
+            "data_collection": "deny",
+            "allow_fallbacks": False,
+        }
     risposta = _chiama(
         cfg["url"],
         {"Authorization": f"Bearer {chiave_api}",
          "Content-Type": "application/json"},
-        {"model": modello, "max_tokens": 2048,
-         "messages": [{"role": "user", "content": quesito}]})
+        payload)
     scelte = risposta.get("choices", [])
     if scelte:
         return scelte[0].get("message", {}).get("content", "").strip() \

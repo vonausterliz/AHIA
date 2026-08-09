@@ -31,22 +31,15 @@ dispositivo, cosa opportuna per un'app che tratta dati sanitari.
 
 ---
 
-## Le schede in breve
+## Il menu in breve
 
-AHIA è organizzata in schede, in cima alla pagina:
+AHIA usa un menu laterale raggruppato per attività. La barra mostra soltanto lo stato di Ollama, il profilo modelli e l’utente corrente.
 
-- **Profilo** — i tuoi dati di base (età, sesso, altezza, peso, terapie).
-- **Referti** — dove carichi i PDF e li fai elaborare.
-- **Andamento analiti** — i grafici dei valori numerici nel tempo.
-- **Analisi** — la lettura complessiva dei referti, la consultazione e la chat.
-- **Chat** — fai domande sui tuoi dati.
-- **Secondo parere** — prepari un quesito pseudonimizzato per un modello esterno.
-- **Dizionario** — gestisci come le diciture dei laboratori vengono unificate.
-- **Guida** — questo manuale, sempre a portata dentro l'app.
-- **Diagnostica** — metriche tecniche e storico delle tue attività.
-- **Utenti** — solo per l'amministratore, per gestire gli accessi.
+- **Uso quotidiano:** Home, Referti, Andamenti, Assistente e Secondo parere.
+- **Gestione:** Profilo, Dizionario e riferimenti.
+- **Impostazioni:** Modelli e provider, Privacy e dati, Diagnostica, Guida e, per l’amministratore, Utenti.
 
-Le prossime sezioni le spiegano una per una.
+**Assistente** riunisce la lettura guidata e le conversazioni persistenti. Le opzioni per numero di referti e strumenti si trovano nel pannello contestuale della stessa pagina, non nella barra globale.
 
 ---
 
@@ -112,7 +105,7 @@ pseudonimizzazione del secondo parere, che lavora sul testo salvato.
 
 *Nota tecnica.* Prima di elaborare, AHIA controlla che i modelli scelti siano
 installati in Ollama; se ne manca uno, te lo dice con il comando per scaricarlo.
-I modelli si scelgono nella barra laterale, uno per funzione.
+I modelli si configurano in **Impostazioni → Modelli e provider**. La modalità automatica usa quattro ruoli; le eccezioni per singola funzione restano disponibili nel pannello avanzato.
 
 ---
 
@@ -135,7 +128,7 @@ differenza ti dice quanto fidarti dell'intervallo mostrato.
 
 ---
 
-## Analisi
+## Assistente
 
 **A cosa serve.** È il posto dove leggi e discuti i tuoi referti — di ogni tipo,
 numerici e descrittivi. Fa tre cose:
@@ -156,21 +149,10 @@ Ricorda che è un modello che gira sul tuo computer: utile per orientarti, ma no
 è un medico.
 
 *Nota tecnica.* I calcoli (differenze, percentuali) non li fa il modello: gli
-arrivano già pronti, così non può sbagliarli. La chat risponde a una domanda
-alla volta e non tiene il filo della conversazione precedente; il testo completo
-dei referti è sempre consultabile per controllare la fonte.
+arrivano già pronti, così non può sbagliarli. **Lettura guidata** offre anche
+domande rapide sull’ambito corrente; **Conversazioni** mantiene invece uno
+storico persistente. Il testo dei referti resta consultabile per controllare la fonte.
 
----
-
-## Chat
-
-**A cosa serve.** Fare domande in linguaggio naturale sui tuoi dati: "come è
-andato il colesterolo nell'ultimo anno?", "quali valori erano fuori norma
-nell'ultimo esame?".
-
-Scrivi la domanda e il modello risponde basandosi sui tuoi referti. Anche qui
-vale la regola d'oro: le risposte vanno prese come un aiuto a orientarti, non
-come un verdetto.
 
 ---
 
@@ -178,7 +160,7 @@ come un verdetto.
 
 **A cosa serve.** Un modello locale è limitato; su un ragionamento clinico
 complesso, un modello di frontiera (come quelli dietro Claude o ChatGPT) fa
-molto meglio. Questa scheda prepara un testo da sottoporre a uno di questi
+molto meglio. Questa pagina guida in tre fasi e prepara un testo da sottoporre a uno di questi
 modelli riducendo l'esposizione degli identificatori riconosciuti.
 
 **Come si fa.**
@@ -197,8 +179,9 @@ modelli riducendo l'esposizione degli identificatori riconosciuti.
    errato: l'eccezione vale per questa richiesta e non viene salvata.
 5. Conferma l'esatto testo mostrato. Qualsiasi modifica o nuova sostituzione
    invalida la conferma e richiede una nuova lettura.
-6. Copia o scarica il payload, oppure invialo direttamente se hai configurato
-   una chiave API.
+6. Dopo il passaggio alla fase **Invia e reidrata**, copia o scarica il payload,
+   oppure invialo direttamente se hai configurato chiave e modello in
+   **Impostazioni → Modelli e provider**.
 7. Incolla in AHIA la risposta ottenuta manualmente, oppure attendi quella
    dell'invio diretto: i token integri vengono sostituiti localmente con i valori
    originali. La risposta reidratata contiene di nuovo dati personali.
@@ -231,6 +214,16 @@ derivata dalla tua password. Se reimposti la password, dovrai reinserirle.
 
 ---
 
+## Modelli e provider
+
+Per l’uso normale scegli soltanto una priorità: **Equilibrato**, **Più veloce** o **Massima qualità**. AHIA assegna i modelli installati a quattro ruoli: operazioni rapide, analisi approfondita, visione e ricerca semantica. La modalità Personalizzata mantiene le eccezioni per singola funzione.
+
+Per OpenAI, Anthropic e OpenRouter la lista viene letta dal provider soltanto quando premi **Aggiorna elenco modelli** e resta in cache locale. La presenza nella lista indica disponibilità per l’account, non validazione clinica. Se un modello scelto scompare, AHIA avvisa e non effettua fallback silenziosi.
+
+Con OpenRouter AHIA usa l’endpoint UE e richiede zero data retention, nessuna raccolta dati e nessun fallback. Questi vincoli riducono l’esposizione, ma non rendono anonima una storia clinica pseudonimizzata.
+
+---
+
 ## Dizionario
 
 **A cosa serve.** Ogni laboratorio scrive gli esami a modo suo: "Glicemia",
@@ -253,7 +246,7 @@ non va, e per avere un'idea del carico di lavoro.
 In cima ci sono quattro numeri di sintesi (chiamate ai modelli, errori, durata
 media, token totali). Sotto, la tabella degli eventi, filtrabile per vedere solo
 le chiamate ai modelli o solo gli errori. Puoi esportare tutto in CSV o svuotare
-il registro.
+il registro. Qui trovi anche il registro e le metriche dell’ultima elaborazione e il log di Ollama, rimossi dalla pagina Referti.
 
 > **Riguarda solo il tuo archivio.** Ogni utente vede la diagnostica delle
 > proprie attività, non di quelle altrui: come per tutti i dati, gli archivi
@@ -277,12 +270,11 @@ per fare un backup o spostare i dati su un altro computer.
 
 ---
 
-## Dove sono i miei dati
+## Privacy e dati
 
 Tutto ciò che AHIA salva sta sul tuo computer, in una cartella nascosta chiamata
 `.ahia` dentro la tua cartella utente. Non c'è nessun cloud e nessun backup
-automatico: se vuoi una copia di sicurezza, usa l'esportazione in zip dalla
-scheda Utenti, oppure copia direttamente la cartella.
+automatico: se vuoi una copia di sicurezza, usa **Privacy e dati → Esporta il mio archivio**. L’amministratore può inoltre importare o esportare un archivio dalla pagina Utenti.
 
 > **Il database non è cifrato.** Chiunque abbia accesso al tuo utente del
 > computer può leggere l'archivio. Se il computer è condiviso, valuta un disco o
