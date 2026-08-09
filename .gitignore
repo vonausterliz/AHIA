@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Dati sanitari locali se AHIA_DATA_DIR viene puntata nel progetto.
+.ahia/
+archivi/
+*.db
+*.db-shm
+*.db-wal
+
+# File locali con segreti o configurazioni personali.
+.env
+.env.*
+!.env.example
+
+# Sistema operativo ed editor.
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
