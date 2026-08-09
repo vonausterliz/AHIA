@@ -23,6 +23,16 @@ class PresidioAdapterTest(unittest.TestCase):
         with patch.dict(os.environ, {"AHIA_PRESIDIO_SCORE": "non-numero"}):
             self.assertEqual(presidio_ahia.soglia_configurata(), 0.55)
 
+    def test_soglia_specifica_per_tipo_prevale_sulla_globale(self):
+        with patch.dict(os.environ, {
+                "AHIA_PRESIDIO_SCORE": "0.55",
+                "AHIA_PRESIDIO_SCORE_PERSON": "0.72",
+        }):
+            self.assertEqual(
+                presidio_ahia.soglia_configurata("PERSON"), 0.72)
+            self.assertEqual(
+                presidio_ahia.soglia_configurata("LOCATION"), 0.55)
+
     def test_tipi_presidio_non_diventano_tag_semantici(self):
         self.assertEqual(presidio_ahia._TIPI["PERSON"], "PERSONA")
         self.assertEqual(presidio_ahia._TIPI["IT_FISCAL_CODE"],
@@ -46,6 +56,8 @@ class PresidioAdapterTest(unittest.TestCase):
                                     score=0.87),
                     SimpleNamespace(start=12, end=40,
                                     entity_type="ORGANIZATION", score=0.80),
+                    SimpleNamespace(start=0, end=5, entity_type="LOCATION",
+                                    score=0.20),
                 ]
 
         analyzer = AnalyzerFinto()
@@ -58,6 +70,26 @@ class PresidioAdapterTest(unittest.TestCase):
         self.assertEqual([(e.tipo, testo[e.start:e.end]) for e in entita],
                          [("PERSONA", "Mario Rossi")])
         self.assertEqual(analyzer.kwargs["language"], "it")
+
+    def test_filtro_ner_protegge_nomi_e_localita_ma_non_analiti(self):
+        class AnalyzerFinto:
+            def analyze(self, **kwargs):
+                return [
+                    SimpleNamespace(start=3, end=14, entity_type="PERSON",
+                                    score=0.85),
+                    SimpleNamespace(start=23, end=29, entity_type="LOCATION",
+                                    score=0.85),
+                    SimpleNamespace(start=31, end=40, entity_type="LOCATION",
+                                    score=0.85),
+                ]
+
+        testo = "Da Mario Rossi, vive a Milano. Ferritina normale."
+        presidio_ahia._analyzer = AnalyzerFinto()
+        with patch.dict(os.environ, {"AHIA_PRESIDIO_ENABLED": "1"}):
+            entita, _ = presidio_ahia.rileva_presidio(testo)
+        self.assertEqual(
+            [(e.tipo, testo[e.start:e.end]) for e in entita],
+            [("PERSONA", "Mario Rossi"), ("LOCALITA", "Milano")])
 
 
 if __name__ == "__main__":

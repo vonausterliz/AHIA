@@ -3,6 +3,25 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.22.0 — 9 agosto 2026
+
+### Pseudonimizzazione del secondo parere
+
+- **Benchmark italiano riproducibile.** Aggiunto un corpus CC0 interamente
+  sintetico di 180 casi, con metriche complessive e per tipo su recall,
+  precisione, categoria, leak, conservazione clinica e round-trip. Con Presidio
+  e il modello italiano il corpus raggiunge tutti i gate configurati.
+- **Tuning di Presidio.** Le soglie possono essere differenziate per entità e
+  un filtro strutturale evita che analiti, farmaci e unità vengano scambiati per
+  persone o località. Corretto anche un falso positivo del recognizer medico.
+- **Regole PII personali.** Un dato sfuggito può essere ricordato per l'utente:
+  valori, categorie e stato sono conservati in un unico documento cifrato,
+  separato per archivio. Le regole possono essere mostrate, modificate,
+  disattivate ed eliminate.
+- **Casi di miglioramento senza upload.** Dalla segnalazione manuale si può
+  preparare un JSON che esclude il valore reale. Il contesto residuo viene
+  mostrato integralmente e il download richiede un consenso esplicito.
+
 ## 1.21.0 — 27 luglio 2026
 
 ### Novità e correzioni

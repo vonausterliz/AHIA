@@ -21,7 +21,7 @@ from pathlib import Path
 # insieme, come MANUALE.md.
 DIR_APP = Path(__file__).resolve().parent
 
-VERSIONE = "1.21.0"
+VERSIONE = "1.22.0"
 
 # AGPL-3.0, articolo 13: chi interagisce con il programma attraverso una rete
 # deve poter ottenere il sorgente. Se pubblichi una tua versione modificata,

@@ -114,10 +114,23 @@ class MotorePseudonimizzazioneTest(unittest.TestCase):
         self.assertIn("DATA_CLINICA", tipi)
         self.assertEqual(testo.count("["), 0)
 
+    def test_medico_non_scambia_dr_interno_a_un_nome(self):
+        testo = "Il caregiver Andrea Gallo riferisce buona aderenza."
+        entita = ps.rileva_legacy(testo)
+        self.assertFalse(any(e.tipo == "MEDICO" for e in entita))
+
     def test_token_ha_esattamente_96_bit_esadecimali(self):
         esito = ps.pseudonimizza(
             "Mario", [ps.Entita(0, 5, "PERSONA")])
         self.assertRegex(esito.testo, re.compile(r"^\[\[[0-9A-F]{24}\]\]$"))
+
+    def test_regola_personale_rispetta_i_confini_e_ha_priorita(self):
+        testo = "Mario visita il poliambulatorio Mariologia con Mario."
+        entita = ps.rileva_regole_personali(
+            testo, [("Mario", "PERSONA")])
+        self.assertEqual([testo[e.start:e.end] for e in entita],
+                         ["Mario", "Mario"])
+        self.assertTrue(all(e.fonte == "personale" for e in entita))
 
 
 if __name__ == "__main__":

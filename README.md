@@ -244,6 +244,14 @@ Su Windows sostituisci `.venv/bin/python` con
 scheda *Secondo parere*. Le variabili `AHIA_PRESIDIO_MODEL` e
 `AHIA_PRESIDIO_SCORE` cambiano rispettivamente modello e soglia; con
 `AHIA_PRESIDIO_STRICT=1` l'invio diretto è bloccato se Presidio non è attivo.
+Una soglia specifica per entità si imposta, per esempio, con
+`AHIA_PRESIDIO_SCORE_PERSON` o `AHIA_PRESIDIO_SCORE_LOCATION`.
+
+Il benchmark sintetico completo si esegue con:
+
+```bash
+.venv/bin/python tools/benchmark_pii.py --verifica-obiettivi
+```
 
 ---
 
@@ -334,6 +342,8 @@ volta sola, ma non si beneficia delle schede di layout.
 | `parere.py` | minimizzazione e composizione del quesito per il secondo parere |
 | `pseudonimizzazione.py` | token opachi, mappa temporanea e reidratazione esatta |
 | `presidio_ahia.py` | adapter opzionale per Presidio e NER italiano |
+| `regole_pii.py` | regole personali cifrate ed export sanitizzato |
+| `benchmark_pii.py` | corpus sintetico, metriche e gate di qualità |
 | `riferimenti.py` | intervalli di riferimento e collegamenti alle schede |
 | `utenti.py` | autenticazione, archivi separati, export/import |
 | `segreti.py` | chiavi API cifrate, invio ai modelli di frontiera |
@@ -400,10 +410,10 @@ e nel prompt del modello, quindi:
 `OLLAMA_HOST` accetta solo `http://` e `https://`, così una variabile
 d'ambiente ostile non può far leggere file locali.
 
-La pseudonimizzazione reversibile progettata per una futura evoluzione del
-secondo parere — token opachi, mappa solo locale, reidratazione della risposta e
-segnalazione manuale delle PII non rilevate — è descritta nella
-[specifica di progetto](docs/PSEUDONIMIZZAZIONE.md). Non è ancora implementata.
+La pseudonimizzazione reversibile del secondo parere — token opachi, mappa solo
+locale, reidratazione, segnalazione manuale e regole personali cifrate — è
+implementata e descritta nella
+[specifica di progetto](docs/PSEUDONIMIZZAZIONE.md).
 
 ---
 

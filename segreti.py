@@ -95,8 +95,14 @@ def prepara(conn) -> None:
     conn.commit()
 
 
-def salva_chiave(conn, utente_id: int, password: str, fornitore: str,
-                 chiave_api: str) -> None:
+def salva_segreto(conn, utente_id: int, password: str, nome: str,
+                   valore: str) -> None:
+    """Salva un valore cifrato associato all'utente.
+
+    ``nome`` non deve contenere dati sensibili: resta in chiaro per consentire
+    di individuare il record da decifrare. Il contenuto viene sempre cifrato
+    con un sale nuovo, anche quando sostituisce un valore esistente.
+    """
     import secrets
 
     sale = secrets.token_bytes(16)
@@ -104,24 +110,45 @@ def salva_chiave(conn, utente_id: int, password: str, fornitore: str,
         "INSERT INTO segreti (utente_id, nome, valore, sale) VALUES (?,?,?,?) "
         "ON CONFLICT(utente_id, nome) DO UPDATE SET valore=excluded.valore, "
         "sale=excluded.sale",
-        (utente_id, f"api.{fornitore}", cifra(password, sale, chiave_api), sale))
+        (utente_id, nome, cifra(password, sale, valore), sale))
     conn.commit()
 
 
-def leggi_chiave(conn, utente_id: int, password: str,
-                 fornitore: str) -> str | None:
+def leggi_segreto(conn, utente_id: int, password: str,
+                   nome: str) -> str | None:
+    """Restituisce il valore in chiaro, o ``None`` se manca o non si decifra."""
     riga = conn.execute(
         "SELECT valore, sale FROM segreti WHERE utente_id=? AND nome=?",
-        (utente_id, f"api.{fornitore}")).fetchone()
+        (utente_id, nome)).fetchone()
     if not riga:
         return None
     return decifra(password, riga["sale"], riga["valore"])
 
 
-def elimina_chiave(conn, utente_id: int, fornitore: str) -> None:
+def esiste_segreto(conn, utente_id: int, nome: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM segreti WHERE utente_id=? AND nome=?",
+        (utente_id, nome)).fetchone() is not None
+
+
+def elimina_segreto(conn, utente_id: int, nome: str) -> None:
     conn.execute("DELETE FROM segreti WHERE utente_id=? AND nome=?",
-                 (utente_id, f"api.{fornitore}"))
+                 (utente_id, nome))
     conn.commit()
+
+
+def salva_chiave(conn, utente_id: int, password: str, fornitore: str,
+                 chiave_api: str) -> None:
+    salva_segreto(conn, utente_id, password, f"api.{fornitore}", chiave_api)
+
+
+def leggi_chiave(conn, utente_id: int, password: str,
+                 fornitore: str) -> str | None:
+    return leggi_segreto(conn, utente_id, password, f"api.{fornitore}")
+
+
+def elimina_chiave(conn, utente_id: int, fornitore: str) -> None:
+    elimina_segreto(conn, utente_id, f"api.{fornitore}")
 
 
 def fornitori_configurati(conn, utente_id: int) -> list[str]:

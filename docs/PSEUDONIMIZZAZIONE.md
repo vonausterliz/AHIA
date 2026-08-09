@@ -1,6 +1,6 @@
 # Pseudonimizzazione del secondo parere
 
-Stato: specifica di progetto con MVP delle fasi 2-4 implementato
+Stato: fasi 1-6 implementate e validate su corpus sintetico
 
 Ambito: funzionalita' **Secondo parere**
 
@@ -10,9 +10,10 @@ parere in `app.py`
 Sono implementati il motore reversibile, i recognizer AHIA, l'adapter Presidio
 italiano opzionale, i token opachi, la conferma vincolata all'impronta, la
 segnalazione manuale per la richiesta corrente e la reidratazione dei percorsi
-diretto e manuale. Restano rinviati le regole personali persistenti, l'export di
-casi di miglioramento, la revisione dei falsi positivi e il benchmark completo
-con Presidio installato.
+diretto e manuale. Sono inoltre disponibili regole personali cifrate,
+modificabili e cancellabili, export locale sanitizzato e un benchmark CC0 di
+180 casi con metriche per tipo. Restano il collaudo end-to-end con i fornitori
+esterni, l'hardening multiutente e il rilascio graduale.
 
 ## 1. Obiettivo
 
@@ -394,30 +395,60 @@ Formulazioni ammesse:
 Le soglie devono essere misurate separatamente per tipo di entita' e su casi
 positivi, negativi difficili, rumore OCR e round-trip con risposte simulate.
 
+### 13.1 Dataset pubblici valutati
+
+La fase 5 ha verificato anche le principali risorse riutilizzabili:
+
+- [Presidio Research](https://github.com/microsoft/presidio-research) ha
+  licenza MIT, un generatore di PII sintetiche e strumenti di valutazione, ma
+  gli esempi pronti sono principalmente inglesi. AHIA ne adotta l'impostazione
+  metodologica senza aggiungere la dipendenza.
+- [E3C](https://live.european-language-grid.eu/catalogue/corpus/7618) contiene
+  casi clinici anche italiani, liberamente disponibili e dichiarati privi di
+  dati personali e sensibili. Non offre pero' un gold standard PII: e' adatto
+  in futuro come insieme negativo per verificare la conservazione clinica,
+  rispettando la licenza del singolo sottoinsieme.
+- Il lavoro
+  [Mamma Mia! Where's My Name?](https://aclanthology.org/2025.clicit-1.70/)
+  descrive un gold standard manuale su 80 note italiane E3C per nomi, eta',
+  date e localita'. Al momento della valutazione il paper non indica un
+  pacchetto delle annotazioni con licenza e URL di download separati, quindi
+  tali annotazioni non vengono copiate nel repository.
+- I corpus clinici [n2c2](https://n2c2.dbmi.hms.harvard.edu/) sono inglesi e
+  richiedono registrazione e Data Use Agreement; non sono redistribuibili con
+  AHIA.
+
+La scelta corrente e' quindi un corpus AHIA CC0 interamente sintetico, con
+provenienza e generazione verificabili. Un futuro test E3C potra' essere
+scaricato separatamente e usato soltanto per i falsi positivi clinici.
+
 ## 14. Decisioni rinviate
 
 Richiedono una decisione durante le fasi successive:
 
-- modello NLP italiano e soglie di confidenza per tipo;
-- cifratura e recupero delle PII personali ricordate;
 - durata massima della mappa nel percorso manuale;
 - formato definitivo dei token dopo test con i modelli esterni supportati;
-- livello di contesto mostrato nell'interfaccia di segnalazione;
 - politica su localita' e strutture: token reversibile o generalizzazione;
 - eventuale persistenza cifrata di una richiesta manuale fra riavvii;
-- modalita' di produzione e revisione dei casi sintetici esportabili.
 
-## 15. Piano di realizzazione successivo
+## 15. Piano aggiornato
 
-1. Motore reversibile indipendente da Presidio e relativi test.
-2. Conversione delle regex legacy da sostituzioni a recognizer senza effetti
-   collaterali.
-3. Reidratazione esatta e validazione dei token.
-4. Corpus sintetico iniziale e test anti-leak.
-5. Adapter Presidio con modello italiano e recognizer AHIA.
-6. Interfaccia di revisione e segnalazione dei falsi negativi.
-7. Congelamento del payload, invio diretto e reidratazione.
-8. Rimozione di `oscura_testo()` e `verifica()` dal flusso del secondo parere
-   dopo il superamento dei test di parita'.
-9. Percorso manuale copia/incolla.
-10. Benchmark, tuning, hardening e rilascio graduale.
+### Completato
+
+1. Motore reversibile, token opachi, reidratazione e test di round-trip.
+2. Recognizer AHIA senza sostituzioni collaterali e adapter Presidio italiano.
+3. Revisione del payload, scansione finale e conferma vincolata all'impronta.
+4. Segnalazione manuale e reidratazione dei percorsi diretto e copia/incolla.
+5. Corpus sintetico CC0 di 180 casi, benchmark per tipo e tuning dei falsi
+   positivi clinici.
+6. Regole personali cifrate, isolate per utente, modificabili, disattivabili e
+   cancellabili; export sanitizzato con anteprima e consenso.
+
+### Prossime fasi
+
+7. Test end-to-end con provider simulati e verifica della conservazione dei
+   token sui modelli esterni supportati.
+8. Audit di log, isolamento multiutente, ciclo di vita della mappa e test su
+   token alterati.
+9. Pilot controllato, revisione UX, metriche locali senza contenuto clinico e
+   rilascio graduale.

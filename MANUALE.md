@@ -190,7 +190,8 @@ modelli riducendo l'esposizione degli identificatori riconosciuti.
    riconosciuti con token casuali come `[[4E91A75C820DF63B18A05CC7]]`. Il token
    non indica se rappresenta un paziente, un medico o una struttura.
 4. **Rileggi il payload.** Se noti un dato sfuggito, usa **Segnala un dato non
-   rilevato**, scegli le occorrenze e AHIA le protegge nella richiesta corrente.
+   rilevato** e scegli le occorrenze. Puoi limitarlo alla richiesta oppure
+   ricordarlo come regola cifrata per questo utente.
 5. Conferma l'esatto testo mostrato. Qualsiasi modifica o nuova sostituzione
    invalida la conferma e richiede una nuova lettura.
 6. Copia o scarica il payload, oppure invialo direttamente se hai configurato
@@ -208,6 +209,16 @@ modelli riducendo l'esposizione degli identificatori riconosciuti.
 >
 > La mappa dei token vive soltanto nella sessione corrente. Se chiudi AHIA prima
 > di incollare la risposta manuale, non potrà essere ricostruita.
+>
+> Le regole personali sono invece persistenti, isolate per utente e cifrate con
+> una chiave derivata dalla password. Nel pannello **Regole PII personali** puoi
+> mostrarle, modificarle, disattivarle o eliminarle. Reimpostando la password
+> non saranno più decifrabili.
+>
+> Puoi preparare un caso JSON per migliorare i rilevatori: AHIA rimuove il valore
+> segnalato, non effettua upload e mostra l'intero contenuto prima di abilitare
+> il download. Il contesto può comunque contenere dati sanitari o altre PII e
+> deve essere revisionato.
 >
 > **L'invio diretto tramite chiave API non è testato.** Il percorso sicuro e
 > collaudato è quello manuale: copi il testo e lo incolli tu, dopo averlo letto.

@@ -31,6 +31,7 @@ import ingest
 import parere
 import presidio_ahia
 import pseudonimizzazione as pseudo
+import regole_pii
 import riferimenti
 import semantica
 import segreti
@@ -267,21 +268,22 @@ def _primo_avvio():
                "database.")
 
 
-def _dimentica_secondo_parere() -> None:
+def _dimentica_secondo_parere(*, includi_widget_pii: bool = True) -> None:
     """Elimina mappa, payload e risposta dalla sessione corrente."""
     sessione = st.session_state.get("parere_sessione_pseudo")
     if isinstance(sessione, pseudo.SessionePseudonimi):
         sessione.dimentica()
     chiavi = {
         "quesito_base", "quesito_origine_pseudo", "quesito_esterno",
+        "quesito_esterno_prossimo",
         "parere_sessione_pseudo", "parere_stato_presidio",
         "parere_avvisi_pseudo", "parere_hash_visto",
         "parere_hash_confermato", "conferma_parere_payload",
         "parere_risposta", "parere_risposta_pseudonima",
         "parere_avvisi_risposta", "risposta_manual_pseudo",
     }
-    chiavi.update(k for k in st.session_state
-                  if k.startswith("pii_non_rilevata"))
+    if includi_widget_pii:
+        chiavi.update(k for k in st.session_state if k.startswith("pii_"))
     for chiave in chiavi:
         st.session_state.pop(chiave, None)
 
@@ -1572,6 +1574,20 @@ with tabs[5]:
                     "rileggilo prima di usarlo")
 
         profilo_parere = core.leggi_profilo(conn)
+        if st.session_state.pop("pii_reset_gestione", False):
+            for chiave_gestione in list(st.session_state):
+                if chiave_gestione.startswith("pii_gestione_"):
+                    st.session_state.pop(chiave_gestione, None)
+        password_regole = st.session_state.get("chiave_sessione")
+        regole_memorizzate: list[regole_pii.RegolaPII] = []
+        errore_caricamento_regole = ""
+        if password_regole:
+            try:
+                regole_memorizzate = regole_pii.carica(
+                    conn, utente_corrente["id"], password_regole)
+            except regole_pii.ErroreRegole as exc:
+                errore_caricamento_regole = str(exc)
+        valori_regole_attive = regole_pii.attive(regole_memorizzate)
         # Una nuova proposta genera sempre una nuova mappa e un nuovo spazio di
         # token. La mappa resta nell'oggetto di sessione e non viene serializzata.
         if st.session_state.get("quesito_origine_pseudo") != proposta:
@@ -1579,7 +1595,7 @@ with tabs[5]:
             if isinstance(precedente, pseudo.SessionePseudonimi):
                 precedente.dimentica()
             rilevate, stato_presidio = presidio_ahia.rileva(
-                proposta, profilo_parere)
+                proposta, profilo_parere, valori_regole_attive)
             esito = pseudo.pseudonimizza(proposta, rilevate)
             payload = esito.testo + "\n\n---\n\n" + pseudo.ISTRUZIONI_TOKEN
             esito.sessione.impronta_payload = pseudo.impronta(payload)
@@ -1617,7 +1633,18 @@ with tabs[5]:
                 stato_presidio and stato_presidio.attivo):
             st.error("La modalità strict è attiva: l'invio diretto resta "
                      "bloccato finché Presidio italiano non è disponibile.")
+        if errore_caricamento_regole:
+            st.error(":material/key_off: "
+                     f"{errore_caricamento_regole} Gestiscile nel pannello "
+                     "«Regole PII personali» prima di inviare.")
+        elif valori_regole_attive:
+            st.info(":material/bookmark: "
+                    f"{len(valori_regole_attive)} regole PII personali attive; "
+                    "i valori sono stati decifrati soltanto in questa sessione.")
 
+        if "quesito_esterno_prossimo" in st.session_state:
+            st.session_state["quesito_esterno"] = st.session_state.pop(
+                "quesito_esterno_prossimo")
         testo = st.text_area("quesito", height=420,
                              label_visibility="collapsed", key="quesito_esterno")
 
@@ -1640,10 +1667,13 @@ with tabs[5]:
         # La scansione e' ripetuta sull'esatto testo dell'editor. Se trova nuovi
         # intervalli, li mostra e richiede un gesto separato per sostituirli.
         rilevate_finali, stato_scansione = presidio_ahia.rileva(
-            testo, profilo_parere)
+            testo, profilo_parere, valori_regole_attive)
         residue = pseudo.risolvi_sovrapposizioni(testo, rilevate_finali)
         avvisi_payload = list(st.session_state.get("parere_avvisi_pseudo", []))
         avvisi_payload.extend(pseudo.verifica_payload(testo, sessione_pseudo))
+        if errore_caricamento_regole:
+            avvisi_payload.append(
+                "Le regole PII personali non sono disponibili.")
         avvisi_payload = sorted(set(avvisi_payload))
 
         if residue:
@@ -1661,7 +1691,7 @@ with tabs[5]:
                          key="btn_pseudonimizza_residui"):
                 aggiornato = pseudo.pseudonimizza(
                     testo, residue, sessione=sessione_pseudo)
-                st.session_state["quesito_esterno"] = aggiornato.testo
+                st.session_state["quesito_esterno_prossimo"] = aggiornato.testo
                 st.session_state["parere_sessione_pseudo"] = aggiornato.sessione
                 st.session_state["parere_avvisi_pseudo"] = aggiornato.avvisi
                 st.session_state["parere_hash_confermato"] = None
@@ -1675,10 +1705,14 @@ with tabs[5]:
                        "rilevato dai controlli attivi. Non è una garanzia di "
                        "anonimato: la lettura finale spetta a te.")
 
+        if messaggio_regola := st.session_state.pop(
+                "pii_messaggio_regola", None):
+            st.success(messaggio_regola)
+
         with st.popover("Segnala un dato non rilevato",
                         icon=":material/report:", width="stretch"):
-            st.caption("Inserisci il valore esatto. La segnalazione e la sua "
-                       "categoria restano nella richiesta corrente.")
+            st.caption("Inserisci il valore esatto e scegli se proteggerlo "
+                       "soltanto ora o ricordarlo cifrato per questo utente.")
             valore_sfuggito = st.text_input(
                 "Dato da proteggere", max_chars=160,
                 key="pii_non_rilevata_valore",
@@ -1687,7 +1721,8 @@ with tabs[5]:
                 "Categoria locale (facoltativa)",
                 ["ALTRO_PII", "PAZIENTE", "PERSONA", "MEDICO", "STRUTTURA",
                  "LOCALITA", "INDIRIZZO", "CONTATTO",
-                 "IDENTIFICATIVO_SANITARIO", "IDENTIFICATIVO_DOCUMENTO"],
+                 "CODICE_FISCALE", "IDENTIFICATIVO_SANITARIO",
+                 "IDENTIFICATIVO_DOCUMENTO", "DATA_CLINICA"],
                 format_func=lambda t: t.replace("_", " ").title(),
                 key="pii_non_rilevata_tipo")
             occorrenze = pseudo.trova_occorrenze(testo, valore_sfuggito)
@@ -1702,6 +1737,15 @@ with tabs[5]:
                 "Occorrenze da proteggere", etichette_occorrenze,
                 default=etichette_occorrenze,
                 key="pii_non_rilevata_occorrenze")
+            ambito_regola = st.radio(
+                "Ambito",
+                ["Solo questa richiesta", "Ricorda per questo utente"],
+                key="pii_non_rilevata_ambito")
+            prepara_export = st.checkbox(
+                "Prepara anche un caso di miglioramento sanitizzato",
+                key="pii_non_rilevata_export",
+                help="Non viene caricato né inviato automaticamente: dopo la "
+                     "protezione vedrai l'intero JSON prima del download.")
             if st.button("Proteggi le occorrenze selezionate",
                          icon=":material/encrypted:",
                          disabled=not scelte_occorrenze,
@@ -1709,16 +1753,151 @@ with tabs[5]:
                 indici_scelti = [etichette_occorrenze.index(etichetta)
                                  for etichetta in scelte_occorrenze]
                 span_scelti = [occorrenze[indice] for indice in indici_scelti]
-                manuali = pseudo.rileva_valore(
-                    testo, valore_sfuggito, tipo_sfuggito, span_scelti)
-                aggiornato = pseudo.pseudonimizza(
-                    testo, manuali, sessione=sessione_pseudo)
-                st.session_state["quesito_esterno"] = aggiornato.testo
-                st.session_state["parere_sessione_pseudo"] = aggiornato.sessione
-                st.session_state["parere_avvisi_pseudo"] = aggiornato.avvisi
-                st.session_state["parere_hash_confermato"] = None
-                st.session_state.pop("parere_risposta", None)
-                st.rerun()
+                errore_azione = ""
+                candidato_nuovo = None
+                if prepara_export:
+                    try:
+                        candidato_nuovo = regole_pii.crea_caso_miglioramento(
+                            testo, valore_sfuggito, tipo_sfuggito, span_scelti)
+                    except regole_pii.ErroreRegole as exc:
+                        errore_azione = str(exc)
+                if ambito_regola == "Ricorda per questo utente":
+                    if not password_regole:
+                        errore_azione = (
+                            "Riaccedi prima di salvare una regola cifrata.")
+                    elif not errore_azione:
+                        try:
+                            regole_pii.salva(
+                                conn, utente_corrente["id"], password_regole,
+                                valore_sfuggito, tipo_sfuggito)
+                            st.session_state["pii_messaggio_regola"] = (
+                                "Regola personale salvata e cifrata.")
+                        except regole_pii.ErroreRegole as exc:
+                            errore_azione = str(exc)
+                if errore_azione:
+                    st.error(errore_azione)
+                else:
+                    if candidato_nuovo:
+                        st.session_state["pii_export_candidato"] = (
+                            candidato_nuovo)
+                        st.session_state["pii_export_consenso"] = False
+                    manuali = pseudo.rileva_valore(
+                        testo, valore_sfuggito, tipo_sfuggito, span_scelti)
+                    aggiornato = pseudo.pseudonimizza(
+                        testo, manuali, sessione=sessione_pseudo)
+                    st.session_state["quesito_esterno_prossimo"] = (
+                        aggiornato.testo)
+                    st.session_state["parere_sessione_pseudo"] = (
+                        aggiornato.sessione)
+                    st.session_state["parere_avvisi_pseudo"] = aggiornato.avvisi
+                    st.session_state["parere_hash_confermato"] = None
+                    st.session_state.pop("parere_risposta", None)
+                    st.rerun()
+
+        candidato_export = st.session_state.get("pii_export_candidato")
+        if candidato_export:
+            with st.expander("Caso di miglioramento da revisionare",
+                             icon=":material/data_object:", expanded=True):
+                st.warning("Il valore segnalato è stato rimosso, ma il contesto "
+                           "può ancora contenere informazioni sanitarie o altre "
+                           "PII. Controlla integralmente il JSON: AHIA non lo "
+                           "invia e il download resta una tua scelta.")
+                testo_export = json.dumps(
+                    candidato_export, ensure_ascii=False, indent=2)
+                st.code(testo_export, language="json")
+                consenso_export = st.checkbox(
+                    "Ho revisionato l'intero caso e scelgo di salvarlo "
+                    "localmente", key="pii_export_consenso")
+                c_export, c_scarto = st.columns(2)
+                c_export.download_button(
+                    "Scarica il caso JSON", testo_export,
+                    "caso_miglioramento_pii.json", mime="application/json",
+                    icon=":material/download:", disabled=not consenso_export,
+                    width="stretch")
+                if c_scarto.button(
+                        "Scarta", icon=":material/delete:", width="stretch",
+                        key="pii_export_scarto"):
+                    st.session_state.pop("pii_export_candidato", None)
+                    st.rerun()
+
+        with st.expander("Regole PII personali",
+                         icon=":material/bookmarks:"):
+            st.caption("Le regole sono isolate in questo archivio e salvate "
+                       "come un unico documento cifrato con la password. "
+                       "Reimpostando la password non saranno più decifrabili.")
+            if not password_regole:
+                st.warning("Riaccedi per gestire le regole cifrate.")
+            elif errore_caricamento_regole:
+                st.error(errore_caricamento_regole)
+                st.caption("Puoi eliminare il documento non decifrabile e "
+                           "ricreare le regole con la password corrente.")
+                if st.button(
+                        "Elimina tutte le regole non decifrabili",
+                        icon=":material/delete_forever:",
+                        key="pii_elimina_regole_indecifrabili"):
+                    regole_pii.elimina_tutte(conn, utente_corrente["id"])
+                    _dimentica_secondo_parere(includi_widget_pii=False)
+                    st.session_state["pii_reset_gestione"] = True
+                    st.rerun()
+            elif not regole_memorizzate:
+                st.info("Non hai ancora regole personali.")
+            else:
+                attive_numero = sum(r.attiva for r in regole_memorizzate)
+                st.write(f"{len(regole_memorizzate)} regole, "
+                         f"{attive_numero} attive.")
+                mostra_valori = st.checkbox(
+                    "Mostra i valori in chiaro su questo schermo",
+                    key="pii_gestione_mostra")
+                opzioni_regole = {r.id: r for r in regole_memorizzate}
+                regola_id = st.selectbox(
+                    "Regola da gestire", list(opzioni_regole),
+                    format_func=lambda rid: (
+                        f"{opzioni_regole[rid].tipo.replace('_', ' ').title()} "
+                        f"· {'attiva' if opzioni_regole[rid].attiva else 'spenta'} "
+                        f"· {rid[:6]}"),
+                    key="pii_gestione_id")
+                scelta_regola = opzioni_regole[regola_id]
+                if mostra_valori:
+                    valore_regola = st.text_input(
+                        "Valore della regola", value=scelta_regola.valore,
+                        max_chars=regole_pii.LUNGHEZZA_MASSIMA,
+                        key=f"pii_gestione_valore_{regola_id}")
+                else:
+                    st.caption("Il valore non viene inviato al browser finché "
+                               "non scegli di mostrarlo.")
+                    valore_regola = scelta_regola.valore
+                indice_tipo = regole_pii.TIPI_AMMESSI.index(
+                    scelta_regola.tipo)
+                tipo_regola = st.selectbox(
+                    "Categoria", regole_pii.TIPI_AMMESSI, index=indice_tipo,
+                    format_func=lambda t: t.replace("_", " ").title(),
+                    key=f"pii_gestione_tipo_{regola_id}")
+                regola_attiva = st.checkbox(
+                    "Regola attiva", value=scelta_regola.attiva,
+                    key=f"pii_gestione_attiva_{regola_id}")
+                c_salva, c_elimina = st.columns(2)
+                if c_salva.button(
+                        "Salva modifiche", icon=":material/save:",
+                        width="stretch", key="pii_gestione_salva"):
+                    try:
+                        regole_pii.aggiorna(
+                            conn, utente_corrente["id"], password_regole,
+                            regola_id, valore=valore_regola, tipo=tipo_regola,
+                            attiva=regola_attiva)
+                    except regole_pii.ErroreRegole as exc:
+                        st.error(str(exc))
+                    else:
+                        _dimentica_secondo_parere(includi_widget_pii=False)
+                        st.session_state["pii_reset_gestione"] = True
+                        st.rerun()
+                if c_elimina.button(
+                        "Elimina regola", icon=":material/delete:",
+                        width="stretch", key="pii_gestione_elimina"):
+                    regole_pii.elimina(
+                        conn, utente_corrente["id"], password_regole, regola_id)
+                    _dimentica_secondo_parere(includi_widget_pii=False)
+                    st.session_state["pii_reset_gestione"] = True
+                    st.rerun()
 
         st.warning("La pseudonimizzazione riduce l'esposizione degli "
                    "identificatori, ma il quadro clinico può restare "
@@ -1803,7 +1982,7 @@ with tabs[5]:
                 # stato renderizzato in stato valido nel run precedente.
                 hash_invio = pseudo.impronta(testo)
                 finali, stato_finale = presidio_ahia.rileva(
-                    testo, profilo_parere)
+                    testo, profilo_parere, valori_regole_attive)
                 residui_finali = pseudo.risolvi_sovrapposizioni(testo, finali)
                 errori_finali = pseudo.verifica_payload(testo, sessione_pseudo)
                 if (hash_invio != st.session_state.get(

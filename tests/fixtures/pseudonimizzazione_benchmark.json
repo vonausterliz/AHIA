@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "license": "CC0-1.0",
+  "provenance": "Corpus interamente sintetico creato per AHIA; nomi, recapiti e identificativi sono esempi inventati e non provengono da persone reali.",
+  "target_cases": 180,
+  "groups": [
+    {
+      "id": "persona_contatto",
+      "type": "PERSONA",
+      "template": "Il caregiver {pii} riferisce buona aderenza. PCR 1,2 mg/L.",
+      "must_preserve": ["PCR 1,2 mg/L"],
+      "values": ["Giulia Verdi", "Lorenzo Bianchi", "Chiara Romano", "Andrea Gallo", "Elena Conti", "Davide Costa", "Sara Fontana", "Matteo Riva", "Irene Moretti", "Paolo Greco", "Lucia Serra", "Marco De Angelis"]
+    },
+    {
+      "id": "paziente_profilo",
+      "type": "PAZIENTE",
+      "profile_value": true,
+      "template": "Il paziente {pii} presenta emoglobina 13,2 g/dL.",
+      "must_preserve": ["emoglobina 13,2 g/dL"],
+      "values": ["Marta Bellini", "Luca Ferri", "Anna Villa", "Giorgio Marchetti", "Silvia Barbieri", "Fabio Testa", "Claudia Pellegrini", "Stefano Grassi", "Valentina Fiore", "Roberto Amato", "Francesca Leone", "Nicola Parisi"]
+    },
+    {
+      "id": "medico_firma",
+      "type": "MEDICO",
+      "template": "Firmato da {pii}\nConclusioni: quadro stabile.",
+      "must_preserve": ["Conclusioni: quadro stabile"],
+      "values": ["Dott.ssa Ada Salvi", "Dott. Bruno Olmi", "Dr.ssa Carla Neri", "Prof. Diego Rosi", "Dott.ssa Emma Lodi", "Dott. Flavio Santi", "Dr. Gaia Meli", "Prof.ssa Ilaria Pini", "Dott. Leo Tosi", "Dott.ssa Mira Valli", "Dr. Nino Orsi", "Dott.ssa Olga Rizzi"]
+    },
+    {
+      "id": "struttura",
+      "type": "STRUTTURA",
+      "template": "{pii}\nEcografia: fegato nei limiti.",
+      "must_preserve": ["Ecografia: fegato nei limiti"],
+      "values": ["Ospedale Aurora", "Policlinico del Sole", "Clinica Nuova Salute", "Casa di Cura Primavera", "IRCCS Stella Alpina", "Centro Medico Levante", "Laboratorio Analisi Armonia", "Studio Medico Quercia", "Istituto Sanitario Galileo", "Fondazione Cura Serena", "Ambulatorio Porta Verde", "Presidio Sanitario Orizzonte"]
+    },
+    {
+      "id": "localita",
+      "type": "LOCALITA",
+      "template": "La persona vive a {pii}; terapia: ramipril 5 mg/die.",
+      "must_preserve": ["ramipril 5 mg/die"],
+      "values": ["Milano", "Torino", "Bologna", "Firenze", "Genova", "Verona", "Padova", "Parma", "Modena", "Perugia", "Ancona", "Trieste"]
+    },
+    {
+      "id": "indirizzo",
+      "type": "INDIRIZZO",
+      "template": "Residenza: {pii}; terapia invariata.",
+      "must_preserve": ["terapia invariata"],
+      "values": ["Via Galileo Galilei 12", "Viale delle Magnolie 8", "Piazza della Pace 4", "Corso Europa 31", "Largo dei Tigli 6", "Vicolo del Porto 9", "Via Alessandro Volta 27", "Viale Primavera 15", "Piazza Orione 2", "Corso delle Rose 44", "Largo Aurora 3", "Via del Glicine 18"]
+    },
+    {
+      "id": "email",
+      "type": "CONTATTO",
+      "template": "Contatto: {pii}. Ferritina 31 ng/mL.",
+      "must_preserve": ["Ferritina 31 ng/mL"],
+      "values": ["utente01@example.test", "utente02@example.test", "utente03@example.test", "utente04@example.test", "utente05@example.test", "utente06@example.test", "utente07@example.test", "utente08@example.test", "utente09@example.test", "utente10@example.test", "utente11@example.test", "utente12@example.test"]
+    },
+    {
+      "id": "telefono",
+      "type": "CONTATTO",
+      "template": "Recapito {pii}; terapia: bisoprololo 2,5 mg.",
+      "must_preserve": ["bisoprololo 2,5 mg"],
+      "values": ["+39 347 1200001", "+39 347 1200002", "+39 347 1200003", "+39 347 1200004", "+39 347 1200005", "+39 347 1200006", "+39 347 1200007", "+39 347 1200008", "+39 347 1200009", "+39 347 1200010", "+39 347 1200011", "+39 347 1200012"]
+    },
+    {
+      "id": "codice_fiscale",
+      "type": "CODICE_FISCALE",
+      "template": "Codice fiscale {pii}. TSH 2,4 mUI/L.",
+      "must_preserve": ["TSH 2,4 mUI/L"],
+      "values": ["RSSMRA80A01H501U", "VRDGLI75C41F205X", "BNCLNZ82D15L219K", "GLLCHR90E52A944P", "CNTLNE68H60D612R", "FRRDVD77M11F839S", "FNTSRA85P49G273T", "RVAMTT72R03I726V", "MRTIRN66S58L781W", "GRCPLO79T22E715Y", "SRRLCU88A67A271Z", "DNGMRC70B14H224J"]
+    },
+    {
+      "id": "documento",
+      "type": "IDENTIFICATIVO_DOCUMENTO",
+      "template": "Referto n. {pii}; glicemia 94 mg/dL.",
+      "must_preserve": ["glicemia 94 mg/dL"],
+      "values": ["AB123456", "CD234567", "EF345678", "GH456789", "IL567890", "MN678901", "OP789012", "QR890123", "ST901234", "UV112233", "ZX223344", "KL334455"]
+    },
+    {
+      "id": "identificativo_sanitario",
+      "type": "IDENTIFICATIVO_SANITARIO",
+      "template": "Tessera {pii}; vitamina D 24 ng/mL.",
+      "must_preserve": ["vitamina D 24 ng/mL"],
+      "values": ["80380001234567890001", "80380001234567890002", "80380001234567890003", "80380001234567890004", "80380001234567890005", "80380001234567890006", "80380001234567890007", "80380001234567890008", "80380001234567890009", "80380001234567890010", "80380001234567890011", "80380001234567890012"]
+    },
+    {
+      "id": "data_clinica",
+      "type": "DATA_CLINICA",
+      "template": "Visita del {pii}: pressione 125/78 mmHg.",
+      "must_preserve": ["pressione 125/78 mmHg"],
+      "values": ["12/03/2024", "07/09/2025", "21/01/2023", "18/11/2022", "05/06/2021", "29/08/2020", "14/02/2019", "30/04/2018", "09/12/2017", "16/07/2016", "23/10/2015", "02/05/2014"]
+    }
+  ],
+  "negative_cases": [
+    "HbA1c 6,2%; metformina 1000 mg due volte al giorno.",
+    "ALT 31 U/L, AST 27 U/L, bilirubina 0,8 mg/dL.",
+    "Creatinina 0,91 mg/dL; eGFR 88 mL/min.",
+    "Vitamina B12 430 pg/mL; acido folico 8,1 ng/mL.",
+    "Pressione 125/78 mmHg e frequenza 68 bpm.",
+    "Levotiroxina 50 mcg al mattino a digiuno.",
+    "Ramipril 5 mg/die; terapia ben tollerata.",
+    "Ferritina 31 ng/mL e sideremia 82 mcg/dL.",
+    "TSH 2,4 mUI/L; FT4 1,1 ng/dL.",
+    "PCR 1,2 mg/L; VES 9 mm/h.",
+    "Glicemia 94 mg/dL; insulina 7,8 mU/L.",
+    "Colesterolo LDL 108 mg/dL; HDL 56 mg/dL.",
+    "Trigliceridi 99 mg/dL; dieta invariata.",
+    "Emoglobina 13,2 g/dL; MCV 89 fL.",
+    "Leucociti 6,4 x10^9/L; neutrofili 58%.",
+    "Piastrine 244 x10^9/L; MPV 10,1 fL.",
+    "Sodio 140 mmol/L; potassio 4,2 mmol/L.",
+    "Calcio 9,4 mg/dL; fosforo 3,5 mg/dL.",
+    "Albumina 4,3 g/dL; proteine totali 7,1 g/dL.",
+    "Amilasi 61 U/L; lipasi 37 U/L.",
+    "Fosfatasi alcalina 72 U/L; GGT 19 U/L.",
+    "Uricemia 5,1 mg/dL; azotemia 34 mg/dL.",
+    "Saturazione 98%; respiro regolare.",
+    "Temperatura 36,6 °C; nessun sintomo nuovo.",
+    "BMI 23,4; peso stabile negli ultimi mesi.",
+    "Ecografia: fegato nei limiti, colecisti alitiasica.",
+    "Elettrocardiogramma: ritmo sinusale a 68 bpm.",
+    "Spirometria: FEV1 96% del teorico.",
+    "Densitometria: T-score -0,8 a livello femorale.",
+    "Terapia: atorvastatina 20 mg alla sera.",
+    "Terapia: bisoprololo 2,5 mg al mattino.",
+    "Terapia: colecalciferolo 25000 UI mensili.",
+    "Nessuna allergia farmacologica riferita.",
+    "Controllo clinico consigliato tra sei mesi.",
+    "Quadro ematologico sostanzialmente stabile.",
+    "Non emergono alterazioni biochimiche significative."
+  ]
+}

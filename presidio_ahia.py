@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import re
 import threading
 
 from pseudonimizzazione import (Entita, TOKEN_SIMILE_RE, rileva_legacy,
-                                rileva_profilo)
+                                rileva_profilo, rileva_regole_personali)
 
 
 @dataclass(frozen=True)
@@ -37,11 +38,23 @@ def modello_configurato() -> str:
     return os.environ.get("AHIA_PRESIDIO_MODEL", "it_core_news_lg").strip()
 
 
-def soglia_configurata() -> float:
-    grezza = os.environ.get("AHIA_PRESIDIO_SCORE", "0.55")
+def soglia_configurata(tipo_presidio: str | None = None) -> float:
+    """Soglia globale o specifica per entita.
+
+    AHIA_PRESIDIO_SCORE_PERSON prevale sulla variabile globale soltanto per
+    PERSON. Valori non validi ricadono sulla soglia globale, limitata a 0..1.
+    """
+    globale = os.environ.get("AHIA_PRESIDIO_SCORE", "0.55")
+    nome = f"AHIA_PRESIDIO_SCORE_{tipo_presidio}" if tipo_presidio else ""
+    grezza = os.environ.get(nome, globale) if nome else globale
     try:
         return min(1.0, max(0.0, float(grezza)))
     except ValueError:
+        if tipo_presidio:
+            try:
+                return min(1.0, max(0.0, float(globale)))
+            except ValueError:
+                pass
         return 0.55
 
 
@@ -115,6 +128,32 @@ _TIPI = {
 }
 
 
+def _accetta_risultato_ner(testo: str, risultato) -> bool:
+    """Riduce falsi positivi clinici noti del NER generico italiano.
+
+    Il modello assegna spesso lo stesso punteggio a nomi veri e ad analiti,
+    farmaci o unita. Le regole sono quindi strutturali e non dipendono dal solo
+    score: una persona NER deve avere almeno due parole; una localita composta
+    è ammessa, mentre una localita di una parola richiede un indicatore nel
+    contesto immediatamente precedente.
+    """
+    valore = testo[risultato.start:risultato.end].strip()
+    parole = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ']+", valore)
+    if risultato.entity_type == "PERSON":
+        return len(parole) >= 2 and all(len(parola) >= 2 for parola in parole)
+    if risultato.entity_type == "LOCATION":
+        if len(valore) < 3 or any(carattere.isdigit() for carattere in valore):
+            return False
+        if len(parole) >= 2:
+            return True
+        prefisso = testo[max(0, risultato.start - 40):risultato.start]
+        return bool(re.search(
+            r"(?:\b(?:a|da|presso|in|di)\s+|"
+            r"(?:luogo|comune|citt[aà]|residenza|domicilio)\s*:\s*)$",
+            prefisso, re.IGNORECASE))
+    return True
+
+
 def rileva_presidio(testo: str) -> tuple[list[Entita], StatoPresidio]:
     analyzer = _ottieni_analyzer()
     stato_corrente = stato()
@@ -125,7 +164,7 @@ def rileva_presidio(testo: str) -> tuple[list[Entita], StatoPresidio]:
             text=testo,
             language="it",
             entities=list(_TIPI),
-            score_threshold=soglia_configurata(),
+            score_threshold=min(soglia_configurata(tipo) for tipo in _TIPI),
         )
     except Exception as exc:
         return [], StatoPresidio(
@@ -136,17 +175,22 @@ def rileva_presidio(testo: str) -> tuple[list[Entita], StatoPresidio]:
     entita = [
         Entita(r.start, r.end, _TIPI[r.entity_type], float(r.score), "presidio")
         for r in risultati
-        if r.entity_type in _TIPI and 0 <= r.start < r.end <= len(testo)
+        if r.entity_type in _TIPI
+        and float(r.score) >= soglia_configurata(r.entity_type)
+        and 0 <= r.start < r.end <= len(testo)
+        and _accetta_risultato_ner(testo, r)
         and not any(r.start < fine and r.end > inizio
                     for inizio, fine in token_esistenti)
     ]
     return entita, stato_corrente
 
 
-def rileva(testo: str, profilo: dict | None = None
+def rileva(testo: str, profilo: dict | None = None,
+           regole_personali: list[tuple[str, str]] | None = None
            ) -> tuple[list[Entita], StatoPresidio]:
     """Unisce profilo, recognizer AHIA e NER Presidio."""
-    entita = rileva_profilo(testo, profilo)
+    entita = rileva_regole_personali(testo, regole_personali or [])
+    entita.extend(rileva_profilo(testo, profilo))
     entita.extend(rileva_legacy(testo))
     rilevate_presidio, stato_corrente = rileva_presidio(testo)
     entita.extend(rilevate_presidio)

@@ -83,6 +83,7 @@ def _normalizza_valore(valore: str) -> str:
 
 _PRIORITA_FONTE = {
     "manuale": 50,
+    "personale": 45,
     "profilo": 40,
     "legacy": 30,
     "presidio": 20,
@@ -237,11 +238,35 @@ def trova_occorrenze(testo: str, valore: str) -> list[tuple[int, int]]:
 
 
 def rileva_valore(testo: str, valore: str, tipo: str = "ALTRO_PII",
-                   occorrenze: Iterable[tuple[int, int]] | None = None
+                   occorrenze: Iterable[tuple[int, int]] | None = None, *,
+                   fonte: str = "manuale",
                    ) -> list[Entita]:
     intervalli = list(occorrenze) if occorrenze is not None \
         else trova_occorrenze(testo, valore)
-    return [Entita(a, b, tipo, 1.0, "manuale") for a, b in intervalli]
+    return [Entita(a, b, tipo, 1.0, fonte) for a, b in intervalli]
+
+
+def rileva_regole_personali(
+        testo: str, regole: Iterable[tuple[str, str]]) -> list[Entita]:
+    """Rileva valori ricordati usando confini lessicali quando applicabili."""
+    risultati: list[Entita] = []
+    intervalli_token = [m.span() for m in TOKEN_SIMILE_RE.finditer(testo)]
+    for valore, tipo in regole:
+        valore = (valore or "").strip()
+        if not valore:
+            continue
+        schema = re.escape(valore)
+        if valore[0].isalnum():
+            schema = rf"(?<!\w){schema}"
+        if valore[-1].isalnum():
+            schema = rf"{schema}(?!\w)"
+        for match in re.finditer(schema, testo, re.IGNORECASE):
+            if any(match.start() < fine and match.end() > inizio
+                   for inizio, fine in intervalli_token):
+                continue
+            risultati.append(Entita(match.start(), match.end(), tipo, 1.0,
+                                     "personale"))
+    return risultati
 
 
 def rileva_profilo(testo: str, profilo: dict | None) -> list[Entita]:
@@ -305,7 +330,7 @@ _PATTERN_LEGACY: list[tuple[str, re.Pattern[str], float]] = [
                 r"[A-ZÀ-Ù][\wÀ-ÿ']+(?:\s+[A-ZÀ-Ù][\wÀ-ÿ']+){0,2}", re.I),
      0.90),
     ("MEDICO",
-     re.compile(r"(?:(?:firmato|refertato)[ \t]+da|a[ \t]+cura[ \t]+d[ei]l?|"
+     re.compile(r"\b(?:(?:firmato|refertato)[ \t]+da|a[ \t]+cura[ \t]+d[ei]l?|"
                 r"dott(?:\.ssa|oressa|ore|\.)?|dr(?:\.ssa|\.)?|"
                 r"prof(?:\.ssa|\.)?)[ \t]*:?[ \t]*"
                 r"[A-ZÀ-Ù][\wÀ-ÿ'.]+(?:[ \t]+[A-ZÀ-Ù][\wÀ-ÿ'.]+){0,2}",
