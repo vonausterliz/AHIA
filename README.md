@@ -44,12 +44,14 @@ chiede a funzioni che interrogano l'archivio.
 **Cerca nell'archivio.** Ricerca esatta e ricerca per significato, perché in
 italiano medico cercare "fegato grasso" deve trovare "steatosi epatica".
 
-**Prepara un secondo parere anonimizzato.** Un modello locale da 14 miliardi di
+**Prepara un secondo parere pseudonimizzato.** Un modello locale da 14 miliardi di
 parametri non regge il confronto con uno di frontiera sul ragionamento clinico.
 L'app compone un quesito da sottoporre a un modello esterno passando il minimo:
 niente nome, niente laboratorio, date sostituite da intervalli relativi, età
-ridotta a fascia. Il testo lo leggi, lo modifichi e lo copi tu — non parte
-nulla in automatico.
+ridotta a fascia. Gli identificatori riconosciuti diventano token casuali e
+opachi; la mappa resta nella sessione locale e AHIA può ripristinare i valori
+nella risposta. Il testo parte soltanto dopo una conferma legata al suo esatto
+contenuto.
 
 **Gestisce più persone.** Ogni utente ha credenziali proprie e un archivio
 fisicamente separato. Nemmeno l'amministratore accede ai dati altrui.
@@ -87,10 +89,10 @@ appuntamenti.
 > **AHIA è fornita "così com'è", senza garanzie di alcun tipo.**
 >
 > L'applicazione è progettata perché **nulla lasci il tuo computer** senza un
-> tuo gesto esplicito, e perché il quesito del secondo parere sia anonimizzato
+> tuo gesto esplicito, e perché il quesito del secondo parere sia pseudonimizzato
 > prima di qualunque invio. **Questo comportamento non è garantito a priori.**
 > Un bug dell'applicazione, di una libreria di terze parti, del motore di
-> inferenza o di un servizio esterno, un errore di anonimizzazione, o un uso
+> inferenza o di un servizio esterno, un errore di rilevazione, o un uso
 > improprio possono far sì che dati personali — compresi dati sanitari — escano
 > dal computer o vengano condivisi con terze parti.
 >
@@ -226,6 +228,23 @@ cd ahia && python -m venv .venv && .venv\Scripts\activate && pip install -r requ
 
 L'app risponde su `http://localhost:8501`.
 
+### Presidio italiano (facoltativo ma consigliato)
+
+AHIA funziona anche con i soli recognizer di base. Per aggiungere il NER
+italiano e i recognizer di [Presidio](https://github.com/data-privacy-stack/presidio),
+installa nel virtualenv il gruppo opzionale e il modello spaCy:
+
+```bash
+.venv/bin/python -m pip install -r requirements-presidio.txt
+.venv/bin/python -m spacy download it_core_news_lg
+```
+
+Su Windows sostituisci `.venv/bin/python` con
+`.venv\Scripts\python.exe`. Lo stato effettivo dei motori è mostrato nella
+scheda *Secondo parere*. Le variabili `AHIA_PRESIDIO_MODEL` e
+`AHIA_PRESIDIO_SCORE` cambiano rispettivamente modello e soglia; con
+`AHIA_PRESIDIO_STRICT=1` l'invio diretto è bloccato se Presidio non è attivo.
+
 ---
 
 ## Come funziona
@@ -252,7 +271,7 @@ flowchart TB
         RICERCA -.->|embedding| OLLAMA
     end
 
-    APP -.->|solo il secondo parere,<br/>solo se premi Invia,<br/>dati anonimizzati| FRONT[Claude / ChatGPT<br/>modello di frontiera]
+    APP -.->|solo il secondo parere,<br/>solo dopo conferma,<br/>dati pseudonimizzati| FRONT[Claude / ChatGPT<br/>modello di frontiera]
 
     style locale fill:#eef7ee,stroke:#5a5
     style FRONT fill:#fdecea,stroke:#c55
@@ -261,7 +280,8 @@ flowchart TB
 
 Le frecce continue sono dati che restano sul disco; quelle tratteggiate sono
 chiamate ai modelli. L'unica freccia che esce dalla macchina è il secondo
-parere, e solo quando lo invii tu, con i dati già anonimizzati.
+parere, e solo quando lo invii tu, con gli identificatori riconosciuti già
+pseudonimizzati.
 
 ### Principi
 
@@ -311,7 +331,9 @@ volta sola, ma non si beneficia delle schede di layout.
 | `grafici.py` | serie storiche e grafici Altair |
 | `semantica.py` | ricerca per significato con embedding |
 | `strumenti.py` | funzioni che il modello può invocare sull'archivio |
-| `parere.py` | quesito anonimizzato per il secondo parere |
+| `parere.py` | minimizzazione e composizione del quesito per il secondo parere |
+| `pseudonimizzazione.py` | token opachi, mappa temporanea e reidratazione esatta |
+| `presidio_ahia.py` | adapter opzionale per Presidio e NER italiano |
 | `riferimenti.py` | intervalli di riferimento e collegamenti alle schede |
 | `utenti.py` | autenticazione, archivi separati, export/import |
 | `segreti.py` | chiavi API cifrate, invio ai modelli di frontiera |

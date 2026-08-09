@@ -1,10 +1,18 @@
 # Pseudonimizzazione del secondo parere
 
-Stato: specifica di progetto, fase 1
+Stato: specifica di progetto con MVP delle fasi 2-4 implementato
 
 Ambito: funzionalita' **Secondo parere**
 
-Implementazione: non ancora presente
+Implementazione: `pseudonimizzazione.py`, `presidio_ahia.py` e flusso Secondo
+parere in `app.py`
+
+Sono implementati il motore reversibile, i recognizer AHIA, l'adapter Presidio
+italiano opzionale, i token opachi, la conferma vincolata all'impronta, la
+segnalazione manuale per la richiesta corrente e la reidratazione dei percorsi
+diretto e manuale. Restano rinviati le regole personali persistenti, l'export di
+casi di miglioramento, la revisione dei falsi positivi e il benchmark completo
+con Presidio installato.
 
 ## 1. Obiettivo
 

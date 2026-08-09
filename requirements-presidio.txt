@@ -1,0 +1,6 @@
+-r requirements.txt
+
+# Motore avanzato, opzionale. Dopo l'installazione eseguire:
+#   python -m spacy download it_core_news_lg
+presidio-analyzer>=2.2.364,<3
+

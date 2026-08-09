@@ -225,9 +225,9 @@ salute, parlane con il tuo medico. In caso di urgenza, chiama il 112.
 **Responsabilità.** Il software è fornito così com'è, senza garanzie di alcun
 tipo, espresse o implicite. AHIA è progettata perché nulla lasci il tuo computer
 senza un tuo gesto esplicito, e perché il testo del secondo parere sia
-anonimizzato, ma **questo non può essere garantito a priori**: un bug
+pseudonimizzato, ma **questo non può essere garantito a priori**: un bug
 dell'applicazione, di una libreria di terze parti o di un servizio esterno, un
-errore di anonimizzazione o un uso improprio possono far sì che dati personali
+errore di rilevazione o un uso improprio possono far sì che dati personali
 escano dal tuo computer o vengano condivisi con terze parti. Chi ha realizzato
 AHIA **non si assume alcuna responsabilità** per dati personali condivisi con
 terze parti, per malfunzionamenti o bug propri o di componenti di terze parti,
@@ -238,11 +238,12 @@ esclusivo di chi lo usa.
 vengono inviati ad alcun servizio esterno. La riservatezza dell'archivio
 dipende da come proteggi il computer su cui gira.
 
-**Secondo parere.** L'app può preparare un testo anonimizzato da sottoporre a
-un modello esterno. Quel testo non parte da solo: viene mostrato per intero e
-sei tu a copiarlo altrove. Da quel momento vale l'informativa del servizio che
-scegli, non questa. Rileggilo sempre prima di inviarlo e valuta tu se è privo di
-dati che non vuoi condividere: ciò che esce da qui non torna indietro.
+**Secondo parere.** L'app può preparare un testo pseudonimizzato da sottoporre a
+un modello esterno. I token riducono l'esposizione degli identificatori diretti,
+ma il testo resta un dato sanitario e può essere reidentificabile dal contesto.
+Quel testo non parte da solo: viene mostrato per intero e richiede una conferma.
+Da quel momento vale l'informativa del servizio che scegli, non questa.
+Rileggilo sempre prima di inviarlo: ciò che esce da qui non torna indietro.
 L'integrazione diretta con i modelli di frontiera tramite chiave API non è
 testata.
 """, "en": """
@@ -272,9 +273,9 @@ doctor. In an emergency, call your local emergency number.
 **Liability.** The software is provided as is, without warranty of any kind,
 express or implied. AHIA is designed so that nothing leaves your computer
 without an explicit action on your part, and so that the second-opinion text is
-anonymised, but **this cannot be guaranteed in advance**: a bug in the
+pseudonymised, but **this cannot be guaranteed in advance**: a bug in the
 application, in a third-party library, or in an external service, an
-anonymisation error, or improper use may cause personal data to leave your
+detection error, or improper use may cause personal data to leave your
 computer or be shared with third parties. Its author accepts **no liability**
 for personal data shared with third parties, for malfunctions or bugs of its own
 or of third-party components, or for improper use of the application. You use it
@@ -284,13 +285,12 @@ entirely at your own risk.
 to no external service. How well the archive is protected depends on how well
 you protect the computer it runs on.
 
-**Second opinion.** The app can prepare an anonymised text to submit to an
-external model. That text is never sent automatically: it is shown to you in
-full and you are the one who copies it elsewhere. From that point the privacy
-policy of the service you choose applies, not this one. Always read it before
-sending and judge for yourself whether it is free of data you do not want to
-share: what leaves here does not come back. The direct integration with frontier
-models via API key is untested.
+**Second opinion.** The app can prepare pseudonymised text for an external
+model. Tokens reduce the exposure of direct identifiers, but the text remains
+health data and may be re-identifiable from context. It is shown in full and
+requires confirmation before use. From that point the chosen service's privacy
+policy applies. Always read it before sending: what leaves here does not come
+back. Direct integration with frontier models via API key is untested.
 """}
 
 # --- Tipologie di documento -------------------------------------------------

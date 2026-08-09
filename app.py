@@ -29,6 +29,8 @@ import core
 import grafici
 import ingest
 import parere
+import presidio_ahia
+import pseudonimizzazione as pseudo
 import riferimenti
 import semantica
 import segreti
@@ -265,6 +267,25 @@ def _primo_avvio():
                "database.")
 
 
+def _dimentica_secondo_parere() -> None:
+    """Elimina mappa, payload e risposta dalla sessione corrente."""
+    sessione = st.session_state.get("parere_sessione_pseudo")
+    if isinstance(sessione, pseudo.SessionePseudonimi):
+        sessione.dimentica()
+    chiavi = {
+        "quesito_base", "quesito_origine_pseudo", "quesito_esterno",
+        "parere_sessione_pseudo", "parere_stato_presidio",
+        "parere_avvisi_pseudo", "parere_hash_visto",
+        "parere_hash_confermato", "conferma_parere_payload",
+        "parere_risposta", "parere_risposta_pseudonima",
+        "parere_avvisi_risposta", "risposta_manual_pseudo",
+    }
+    chiavi.update(k for k in st.session_state
+                  if k.startswith("pii_non_rilevata"))
+    for chiave in chiavi:
+        st.session_state.pop(chiave, None)
+
+
 def _accedi():
     st.title(":material/lock: AHIA")
     st.caption("Archivio e lettura dei tuoi referti")
@@ -275,6 +296,7 @@ def _accedi():
                                  icon=":material/login:"):
             utente, errore = utenti.verifica(auth, nome, password)
             if utente:
+                _dimentica_secondo_parere()
                 st.session_state["utente"] = utente
                 # serve per cifrare/decifrare le chiavi API; resta solo in
                 # sessione, in memoria, non viene mai persistita
@@ -538,7 +560,9 @@ with st.sidebar:
     c1.caption(f":material/account_circle: **{utente_corrente['nome_utente']}**"
                + (" · amministratore" if e_admin else ""))
     if c2.button("Esci", icon=":material/logout:", width="stretch", key="btn_esci_358"):
+        _dimentica_secondo_parere()
         st.session_state.pop("utente", None)
+        st.session_state.pop("chiave_sessione", None)
         st.rerun()
 
     st.caption(f"Dati in `{DATA_DIR}` — nulla lascia questa macchina.")
@@ -1397,17 +1421,18 @@ with tabs[4]:
 
 with tabs[5]:
     st.subheader("Secondo parere da un modello esterno")
-    st.caption("Prepara un quesito anonimizzato da sottoporre a un modello di "
-               "frontiera. Nulla viene inviato da qui: il testo lo copi tu, "
-               "dopo averlo letto.")
+    st.caption("Prepara un quesito pseudonimizzato da sottoporre a un modello "
+               "di frontiera. I dati riconosciuti vengono sostituiti in locale "
+               "con token opachi e casuali.")
 
     st.error(
         ":material/gpp_maybe: **Nessuna garanzia e nessuna responsabilità.** "
         "AHIA è progettata perché nulla lasci il tuo computer senza un tuo gesto "
-        "esplicito, e perché il testo del secondo parere sia anonimizzato — ma "
+        "esplicito, e perché il testo del secondo parere sia pseudonimizzato — "
+        "ma "
         "questo **non può essere garantito a priori**. Un bug dell'applicazione, "
         "di una libreria di terze parti o del servizio esterno, un errore di "
-        "anonimizzazione o un uso improprio possono far sì che dati personali "
+        "rilevazione o un uso improprio possono far sì che dati personali "
         "escano dal tuo computer o vengano condivisi con terze parti. Usando "
         "questa funzione accetti che chi ha realizzato AHIA **non si assume "
         "alcuna responsabilità** per dati personali condivisi, per malfunzionamenti "
@@ -1477,7 +1502,7 @@ with tabs[5]:
         n_tot = core.numero_prelievi(conn)
         parti_quadro = []
         if ambito == "Tutti i referti":
-            parti_quadro.append(parere.quadro_anonimo(
+            parti_quadro.append(parere.quadro_minimizzato(
                 conn, n_tot, eta=eta_modo, includi_bmi=con_bmi,
                 includi_note=con_note))
             parti_quadro.append(parere.quadro_descrittivi(
@@ -1486,13 +1511,13 @@ with tabs[5]:
             tab = [t for t in tipi_scelti if e_tabellare(t)]
             desc = [t for t in tipi_scelti if not e_tabellare(t)]
             if tab:
-                parti_quadro.append(parere.quadro_anonimo(
+                parti_quadro.append(parere.quadro_minimizzato(
                     conn, n_tot, eta=eta_modo, includi_bmi=con_bmi,
                     includi_note=con_note, tipi=tab))
             if desc:
                 parti_quadro.append(parere.quadro_descrittivi(conn, tipi=desc))
         elif ambito == "Un singolo referto" and sha_scelto:
-            parti_quadro.append(parere.quadro_anonimo(
+            parti_quadro.append(parere.quadro_minimizzato(
                 conn, n_tot, eta=eta_modo, includi_bmi=con_bmi,
                 includi_note=con_note, sha_singolo=sha_scelto))
             parti_quadro.append(parere.quadro_descrittivi(
@@ -1500,13 +1525,14 @@ with tabs[5]:
 
         quadro = "\n\n".join(p for p in parti_quadro if p)
 
-        # I referti descrittivi sono testo libero: l'anonimizzazione automatica
+        # I referti descrittivi sono testo libero: la pseudonimizzazione automatica
         # è meno affidabile che sulla tabella dei valori. Segnaliamolo.
         include_descrittivi = "Referti descrittivi" in quadro
         if include_descrittivi:
             st.warning(
                 ":material/warning: Il parere include referti descrittivi (testo "
-                "libero). L'anonimizzazione automatica toglie i dati riconoscibili "
+                "libero). La pseudonimizzazione automatica protegge i dati "
+                "riconoscibili "
                 "— nome, codici fiscali, email, telefoni, date, indirizzi, numeri "
                 "di referto ed episodio, nomi di strutture sanitarie — ma su testo "
                 "libero non è garantita: possono restare nomi di città, nomi di "
@@ -1542,77 +1568,211 @@ with tabs[5]:
         proposta = parere.componi(quadro, sintesi, lingua_p)
 
         st.divider()
-        st.markdown("**Testo che invieresti** — modificalo liberamente prima di usarlo")
+        st.markdown("**Payload pseudonimizzato** — modificalo liberamente e "
+                    "rileggilo prima di usarlo")
 
-        # Un text_area con chiave "si incolla" al suo valore in sessione e ignora
-        # la proposta ricalcolata: senza questo, aggiungere o togliere la sintesi
-        # locale non aggiornerebbe il testo mostrato. Rigeneriamo il contenuto
-        # quando la proposta di base cambia (nuova sintesi, altra lingua, altri
-        # parametri), preservando invece le modifiche manuali dell'utente finché
-        # la base resta la stessa.
-        if st.session_state.get("quesito_base") != proposta:
-            st.session_state["quesito_base"] = proposta
-            st.session_state["quesito_esterno"] = proposta
+        profilo_parere = core.leggi_profilo(conn)
+        # Una nuova proposta genera sempre una nuova mappa e un nuovo spazio di
+        # token. La mappa resta nell'oggetto di sessione e non viene serializzata.
+        if st.session_state.get("quesito_origine_pseudo") != proposta:
+            precedente = st.session_state.get("parere_sessione_pseudo")
+            if isinstance(precedente, pseudo.SessionePseudonimi):
+                precedente.dimentica()
+            rilevate, stato_presidio = presidio_ahia.rileva(
+                proposta, profilo_parere)
+            esito = pseudo.pseudonimizza(proposta, rilevate)
+            payload = esito.testo + "\n\n---\n\n" + pseudo.ISTRUZIONI_TOKEN
+            esito.sessione.impronta_payload = pseudo.impronta(payload)
+            st.session_state["quesito_origine_pseudo"] = proposta
+            st.session_state["quesito_esterno"] = payload
+            st.session_state["parere_sessione_pseudo"] = esito.sessione
+            st.session_state["parere_stato_presidio"] = stato_presidio
+            st.session_state["parere_avvisi_pseudo"] = esito.avvisi
+            st.session_state["parere_hash_visto"] = ""
+            st.session_state["parere_hash_confermato"] = None
+            st.session_state["conferma_parere_payload"] = False
+            for chiave_stato in (
+                    "parere_risposta", "parere_risposta_pseudonima",
+                    "parere_avvisi_risposta", "risposta_manual_pseudo"):
+                st.session_state.pop(chiave_stato, None)
+
+        sessione_pseudo = st.session_state.get("parere_sessione_pseudo")
+        stato_presidio = st.session_state.get("parere_stato_presidio")
+        if not isinstance(sessione_pseudo, pseudo.SessionePseudonimi):
+            # Recupero difensivo per sessioni aperte durante un aggiornamento.
+            st.session_state.pop("quesito_origine_pseudo", None)
+            st.warning("La mappa temporanea non è più disponibile: rigenero il "
+                       "quesito prima di consentire l'invio.")
+            st.rerun()
+
+        if stato_presidio and stato_presidio.attivo:
+            st.success(":material/security: Controlli attivi: regole AHIA e "
+                       f"Presidio italiano (`{stato_presidio.modello}`).")
+        else:
+            dettaglio = (stato_presidio.dettaglio if stato_presidio else
+                         "Stato di Presidio non disponibile.")
+            st.warning(":material/shield: Sono attivi i controlli di base AHIA; "
+                       f"Presidio italiano non è attivo. {dettaglio}")
+        if presidio_ahia.modalita_strict() and not (
+                stato_presidio and stato_presidio.attivo):
+            st.error("La modalità strict è attiva: l'invio diretto resta "
+                     "bloccato finché Presidio italiano non è disponibile.")
+
         testo = st.text_area("quesito", height=420,
                              label_visibility="collapsed", key="quesito_esterno")
 
-        # Copia negli appunti con conferma. Il testo e' iniettato come stringa
-        # JSON, quindi virgolette e a-capo non rompono il markup; e' comunque il
-        # quesito gia' anonimizzato che l'utente vede sopra, non dati grezzi.
-        import json as _json
-        testo_js = _json.dumps(testo)
-        st.html(f"""
-        <div style="display:flex;justify-content:flex-end;margin-top:-8px">
-          <button id="cp" style="display:flex;align-items:center;gap:6px;
-            padding:6px 12px;border:1px solid #2f6d6a;border-radius:8px;
-            background:#f1f5f5;color:#2f6d6a;font-weight:550;cursor:pointer;
-            font-family:sans-serif;font-size:14px">
-            <span id="cpi">📋</span><span id="cpt">Copia negli appunti</span>
-          </button>
-        </div>
-        <script>
-          const b = document.getElementById('cp');
-          b.onclick = async () => {{
-            try {{
-              await navigator.clipboard.writeText({testo_js});
-              document.getElementById('cpi').textContent = '✅';
-              document.getElementById('cpt').textContent = 'Copied!';
-              setTimeout(() => {{
-                document.getElementById('cpi').textContent = '📋';
-                document.getElementById('cpt').textContent = 'Copia negli appunti';
-              }}, 1800);
-            }} catch (e) {{
-              document.getElementById('cpt').textContent = 'Copia non riuscita';
-            }}
-          }};
-        </script>
-        """, unsafe_allow_javascript=True)
+        sostituzioni = sum(testo.count(token)
+                           for token in sessione_pseudo.token_a_valore)
+        st.caption(f"{sostituzioni} occorrenze protette con "
+                   f"{len(sessione_pseudo.token_a_valore)} token opachi. I token "
+                   "non contengono il tipo del dato né un contatore.")
+        if sessione_pseudo.token_a_tipo:
+            riepilogo_tipi: dict[str, int] = {}
+            for tipo_locale in sessione_pseudo.token_a_tipo.values():
+                riepilogo_tipi[tipo_locale] = riepilogo_tipi.get(tipo_locale, 0) + 1
+            with st.expander("Riepilogo locale delle sostituzioni",
+                             icon=":material/find_in_page:"):
+                st.caption("Le categorie qui sotto restano in AHIA e non sono "
+                           "codificate nei token inviati.")
+                for tipo_locale, numero in sorted(riepilogo_tipi.items()):
+                    st.write(f"- {tipo_locale.replace('_', ' ').title()}: {numero}")
 
-        avvisi = parere.verifica(testo, core.leggi_profilo(conn))
-        if avvisi:
-            for a in avvisi:
-                st.error(f":material/privacy_tip: {a}")
-        else:
-            st.success(":material/verified_user: Nessun dato identificativo "
-                       "rilevato dai controlli automatici. Restano controlli "
-                       "automatici: la lettura finale spetta a te.")
+        # La scansione e' ripetuta sull'esatto testo dell'editor. Se trova nuovi
+        # intervalli, li mostra e richiede un gesto separato per sostituirli.
+        rilevate_finali, stato_scansione = presidio_ahia.rileva(
+            testo, profilo_parere)
+        residue = pseudo.risolvi_sovrapposizioni(testo, rilevate_finali)
+        avvisi_payload = list(st.session_state.get("parere_avvisi_pseudo", []))
+        avvisi_payload.extend(pseudo.verifica_payload(testo, sessione_pseudo))
+        avvisi_payload = sorted(set(avvisi_payload))
 
-        st.warning("Da qui in avanti valgono le condizioni del servizio che "
-                   "sceglierai, non quelle di AHIA. Quello che invii non torna "
-                   "indietro.")
-        confermato = st.checkbox("Ho letto il testo qui sopra e confermo di "
-                                 "volerlo inviare a un servizio esterno")
+        if residue:
+            tipi_residui: dict[str, int] = {}
+            for entita_residua in residue:
+                tipi_residui[entita_residua.tipo] = (
+                    tipi_residui.get(entita_residua.tipo, 0) + 1)
+            descrizione_residui = ", ".join(
+                f"{tipo.replace('_', ' ').lower()}: {numero}"
+                for tipo, numero in sorted(tipi_residui.items()))
+            st.error(":material/privacy_tip: I controlli rilevano nuovi dati "
+                     f"da proteggere ({descrizione_residui}).")
+            if st.button("Pseudonimizza i nuovi dati rilevati",
+                         icon=":material/encrypted:",
+                         key="btn_pseudonimizza_residui"):
+                aggiornato = pseudo.pseudonimizza(
+                    testo, residue, sessione=sessione_pseudo)
+                st.session_state["quesito_esterno"] = aggiornato.testo
+                st.session_state["parere_sessione_pseudo"] = aggiornato.sessione
+                st.session_state["parere_avvisi_pseudo"] = aggiornato.avvisi
+                st.session_state["parere_hash_confermato"] = None
+                st.session_state.pop("parere_risposta", None)
+                st.rerun()
+
+        for avviso in avvisi_payload:
+            st.error(f":material/privacy_tip: {avviso}")
+        if not residue and not avvisi_payload:
+            st.success(":material/verified_user: Nessun ulteriore identificatore "
+                       "rilevato dai controlli attivi. Non è una garanzia di "
+                       "anonimato: la lettura finale spetta a te.")
+
+        with st.popover("Segnala un dato non rilevato",
+                        icon=":material/report:", width="stretch"):
+            st.caption("Inserisci il valore esatto. La segnalazione e la sua "
+                       "categoria restano nella richiesta corrente.")
+            valore_sfuggito = st.text_input(
+                "Dato da proteggere", max_chars=160,
+                key="pii_non_rilevata_valore",
+                placeholder="Nome, luogo, codice o altro identificatore")
+            tipo_sfuggito = st.selectbox(
+                "Categoria locale (facoltativa)",
+                ["ALTRO_PII", "PAZIENTE", "PERSONA", "MEDICO", "STRUTTURA",
+                 "LOCALITA", "INDIRIZZO", "CONTATTO",
+                 "IDENTIFICATIVO_SANITARIO", "IDENTIFICATIVO_DOCUMENTO"],
+                format_func=lambda t: t.replace("_", " ").title(),
+                key="pii_non_rilevata_tipo")
+            occorrenze = pseudo.trova_occorrenze(testo, valore_sfuggito)
+            etichette_occorrenze: list[str] = []
+            if valore_sfuggito and not occorrenze:
+                st.info("Il valore non compare nel payload corrente.")
+            for indice, (inizio, fine) in enumerate(occorrenze):
+                contesto = testo[max(0, inizio - 28):min(len(testo), fine + 28)]
+                contesto = contesto.replace("\n", " ")
+                etichette_occorrenze.append(f"{indice + 1}. …{contesto}…")
+            scelte_occorrenze = st.multiselect(
+                "Occorrenze da proteggere", etichette_occorrenze,
+                default=etichette_occorrenze,
+                key="pii_non_rilevata_occorrenze")
+            if st.button("Proteggi le occorrenze selezionate",
+                         icon=":material/encrypted:",
+                         disabled=not scelte_occorrenze,
+                         key="btn_proteggi_pii_segnalata"):
+                indici_scelti = [etichette_occorrenze.index(etichetta)
+                                 for etichetta in scelte_occorrenze]
+                span_scelti = [occorrenze[indice] for indice in indici_scelti]
+                manuali = pseudo.rileva_valore(
+                    testo, valore_sfuggito, tipo_sfuggito, span_scelti)
+                aggiornato = pseudo.pseudonimizza(
+                    testo, manuali, sessione=sessione_pseudo)
+                st.session_state["quesito_esterno"] = aggiornato.testo
+                st.session_state["parere_sessione_pseudo"] = aggiornato.sessione
+                st.session_state["parere_avvisi_pseudo"] = aggiornato.avvisi
+                st.session_state["parere_hash_confermato"] = None
+                st.session_state.pop("parere_risposta", None)
+                st.rerun()
+
+        st.warning("La pseudonimizzazione riduce l'esposizione degli "
+                   "identificatori, ma il quadro clinico può restare "
+                   "reidentificabile. Da qui in avanti valgono anche le "
+                   "condizioni del servizio esterno scelto.")
+        hash_corrente = pseudo.impronta(testo)
+        if st.session_state.get("parere_hash_visto") != hash_corrente:
+            st.session_state["parere_hash_visto"] = hash_corrente
+            st.session_state["parere_hash_confermato"] = None
+            st.session_state["conferma_parere_payload"] = False
+            for chiave_risposta in (
+                    "parere_risposta", "parere_risposta_pseudonima",
+                    "parere_avvisi_risposta", "risposta_manual_pseudo"):
+                st.session_state.pop(chiave_risposta, None)
+        flag_conferma = st.checkbox(
+            "Ho letto questo esatto payload e confermo di volerlo inviare a "
+            "un servizio esterno", key="conferma_parere_payload",
+            disabled=bool(residue or avvisi_payload))
+        if flag_conferma:
+            st.session_state["parere_hash_confermato"] = hash_corrente
+        confermato = (flag_conferma and
+                      st.session_state.get("parere_hash_confermato") == hash_corrente)
+        pronto = confermato and not residue and not avvisi_payload
+
         c8, c9 = st.columns(2)
-        c8.download_button("Scarica il quesito", testo, "quesito_secondo_parere.md",
-                           icon=":material/download:", disabled=not confermato,
-                           width="stretch")
-        if confermato:
+        c8.download_button(
+            "Scarica il quesito", testo, "quesito_secondo_parere.md",
+            icon=":material/download:", disabled=not pronto, width="stretch")
+        if pronto:
             with c9.popover("Mostra per copiarlo", icon=":material/content_copy:",
                             width="stretch"):
+                st.caption("La mappa vive soltanto in questa sessione. Se chiudi "
+                           "AHIA, la risposta esterna non potrà essere "
+                           "reidratata automaticamente.")
                 st.code(testo, language="markdown")
+                testo_js = json.dumps(testo)
+                st.html(f"""
+                <button id="cp-parere" style="padding:6px 12px;border:1px solid
+                  #2f6d6a;border-radius:8px;background:#f1f5f5;color:#2f6d6a;
+                  font-weight:550;cursor:pointer">📋 Copia negli appunti</button>
+                <script>
+                  const b = document.getElementById('cp-parere');
+                  b.onclick = async () => {{
+                    try {{
+                      await navigator.clipboard.writeText({testo_js});
+                      b.textContent = '✅ Copiato';
+                    }} catch (e) {{ b.textContent = 'Copia non riuscita'; }}
+                  }};
+                </script>
+                """, unsafe_allow_javascript=True)
         else:
             c9.button("Mostra per copiarlo", icon=":material/content_copy:",
-                      disabled=True, width="stretch", key="btn_mostra_per_copiarlo_1010")
+                      disabled=True, width="stretch",
+                      key="btn_mostra_per_copiarlo_pseudo")
 
         # --- Invio diretto a un modello di frontiera ---
         fornitori_pronti = segreti.fornitori_configurati(conn,
@@ -1632,38 +1792,94 @@ with tabs[5]:
             invia_ora = st.button(
                 f"Invia a {segreti.FORNITORI[scelta]['nome']}",
                 type="primary", icon=":material/send:",
-                disabled=not confermato or not pw_sessione,
+                disabled=(not pronto or not pw_sessione or
+                          (presidio_ahia.modalita_strict() and
+                           not stato_scansione.attivo)),
                 key="btn_invia_parere",
-                help=None if confermato else "Conferma la lettura del testo prima "
-                                             "di inviare.")
+                help=None if pronto else "Completa i controlli e conferma "
+                                          "l'esatto payload prima di inviare.")
             if invia_ora and pw_sessione:
-                chiave = segreti.leggi_chiave(conn, utente_corrente["id"],
-                                              pw_sessione, scelta)
-                if not chiave:
-                    st.error("Non riesco a decifrare la chiave API. Se hai "
-                             "reimpostato la password di recente, reinseriscila "
-                             "nel pannello «Chiavi API» qui sotto.")
+                # Ultimo controllo sull'esatto testo, anche se il pulsante era
+                # stato renderizzato in stato valido nel run precedente.
+                hash_invio = pseudo.impronta(testo)
+                finali, stato_finale = presidio_ahia.rileva(
+                    testo, profilo_parere)
+                residui_finali = pseudo.risolvi_sovrapposizioni(testo, finali)
+                errori_finali = pseudo.verifica_payload(testo, sessione_pseudo)
+                if (hash_invio != st.session_state.get(
+                        "parere_hash_confermato") or residui_finali or
+                        errori_finali or
+                        (presidio_ahia.modalita_strict() and
+                         not stato_finale.attivo)):
+                    st.error("Il payload non coincide più con quello verificato "
+                             "oppure richiede nuovi controlli. Rileggilo e "
+                             "confermalo di nuovo.")
                 else:
-                    with st.spinner(f"Invio a {segreti.FORNITORI[scelta]['nome']}…"):
-                        try:
-                            risposta = segreti.invia(scelta, chiave, testo)
-                            st.session_state["parere_risposta"] = risposta
-                        except segreti.ErroreAPI as e:
-                            st.session_state["parere_risposta"] = None
-                            st.error(str(e))
+                    sessione_pseudo.impronta_payload = hash_invio
+                    chiave = segreti.leggi_chiave(
+                        conn, utente_corrente["id"], pw_sessione, scelta)
+                    if not chiave:
+                        st.error("Non riesco a decifrare la chiave API. Se hai "
+                                 "reimpostato la password di recente, "
+                                 "reinseriscila nel pannello «Chiavi API» qui "
+                                 "sotto.")
+                    else:
+                        with st.spinner(
+                                f"Invio a {segreti.FORNITORI[scelta]['nome']}…"):
+                            try:
+                                risposta_pseudo = segreti.invia(
+                                    scelta, chiave, testo)
+                                reidratata = pseudo.reidrata(
+                                    risposta_pseudo, sessione_pseudo)
+                                st.session_state["parere_risposta_pseudonima"] = (
+                                    risposta_pseudo)
+                                st.session_state["parere_risposta"] = reidratata.testo
+                                st.session_state["parere_avvisi_risposta"] = (
+                                    reidratata.token_sconosciuti,
+                                    reidratata.token_malformati)
+                            except segreti.ErroreAPI as e:
+                                st.session_state["parere_risposta"] = None
+                                st.error(str(e))
 
-            if st.session_state.get("parere_risposta"):
-                st.markdown("#### Risposta")
-                st.info("Viene da un modello esterno: vale come le risposte di "
-                        "AHIA — un supporto alla comprensione, non un parere "
-                        "medico. Portala al tuo medico, non usarla per decidere "
-                        "da solo.")
-                st.markdown(st.session_state["parere_risposta"])
-                st.download_button(
-                    "Scarica la risposta",
-                    st.session_state["parere_risposta"],
-                    "risposta_secondo_parere.md", icon=":material/download:",
-                    key="btn_scarica_risposta")
+        # Anche il percorso manuale puo' usare la stessa mappa finche' la
+        # sessione Streamlit resta aperta.
+        with st.expander("Incolla e reidrata una risposta ottenuta manualmente",
+                         icon=":material/find_replace:"):
+            st.caption("Incolla la risposta che contiene i token opachi. AHIA "
+                       "ripristina solo i token esatti appartenenti a questa "
+                       "richiesta; il testo non viene inviato altrove.")
+            risposta_manual = st.text_area(
+                "Risposta pseudonimizzata", height=220,
+                key="risposta_manual_pseudo")
+            if st.button("Reidrata localmente", icon=":material/lock_open:",
+                         disabled=not risposta_manual.strip(),
+                         key="btn_reidrata_risposta_manual"):
+                reidratata = pseudo.reidrata(risposta_manual, sessione_pseudo)
+                st.session_state["parere_risposta_pseudonima"] = risposta_manual
+                st.session_state["parere_risposta"] = reidratata.testo
+                st.session_state["parere_avvisi_risposta"] = (
+                    reidratata.token_sconosciuti, reidratata.token_malformati)
+
+        if st.session_state.get("parere_risposta"):
+            st.markdown("#### Risposta reidratata localmente")
+            st.info("Contiene di nuovo i dati personali sostituiti. Viene da un "
+                    "modello esterno: è un supporto alla comprensione, non un "
+                    "parere medico. Portala al tuo medico, non usarla per "
+                    "decidere da solo.")
+            sconosciuti, malformati = st.session_state.get(
+                "parere_avvisi_risposta", ([], []))
+            if sconosciuti:
+                st.warning(f"La risposta contiene {len(sconosciuti)} token "
+                           "integri ma sconosciuti, lasciati invariati.")
+            if malformati:
+                st.warning(f"La risposta contiene {len(malformati)} token "
+                           "malformati, lasciati invariati senza correzioni.")
+            st.markdown(st.session_state["parere_risposta"])
+            st.download_button(
+                "Scarica la risposta con i dati ripristinati",
+                st.session_state["parere_risposta"],
+                "risposta_secondo_parere.md", icon=":material/download:",
+                key="btn_scarica_risposta")
 
         with st.expander("Chiavi API per l'invio diretto",
                          icon=":material/key:"):

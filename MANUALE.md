@@ -40,7 +40,7 @@ AHIA è organizzata in schede, in cima alla pagina:
 - **Andamento analiti** — i grafici dei valori numerici nel tempo.
 - **Analisi** — la lettura complessiva dei referti, la consultazione e la chat.
 - **Chat** — fai domande sui tuoi dati.
-- **Secondo parere** — prepari un quesito anonimo per un modello esterno.
+- **Secondo parere** — prepari un quesito pseudonimizzato per un modello esterno.
 - **Dizionario** — gestisci come le diciture dei laboratori vengono unificate.
 - **Guida** — questo manuale, sempre a portata dentro l'app.
 - **Diagnostica** — metriche tecniche e storico delle tue attività.
@@ -107,8 +107,8 @@ la cartella dei dati).
 
 *Nota tecnica.* Il testo di un referto viene estratto e salvato al momento del
 caricamento, con la versione di allora. Migliorare l'estrazione non cambia i
-testi già salvati: la ri-estrazione li rigenera. È utile in particolare per
-l'anonimizzazione del secondo parere, che lavora sul testo salvato.
+testi già salvati: la ri-estrazione li rigenera. È utile in particolare per la
+pseudonimizzazione del secondo parere, che lavora sul testo salvato.
 
 *Nota tecnica.* Prima di elaborare, AHIA controlla che i modelli scelti siano
 installati in Ollama; se ne manca uno, te lo dice con il comando per scaricarlo.
@@ -179,27 +179,35 @@ come un verdetto.
 **A cosa serve.** Un modello locale è limitato; su un ragionamento clinico
 complesso, un modello di frontiera (come quelli dietro Claude o ChatGPT) fa
 molto meglio. Questa scheda prepara un testo da sottoporre a uno di questi
-modelli **senza i tuoi dati identificativi**.
+modelli riducendo l'esposizione degli identificatori riconosciuti.
 
 **Come si fa.**
 
 1. Scegli **cosa includere**: tutti i referti, solo alcune categorie (le
    selezioni con le caselle), oppure un singolo referto dalla lista.
 2. Scegli quanto dettaglio dare sull'età e se includere il BMI.
-3. AHIA compone un testo anonimo: niente nome, niente laboratorio, le date
-   diventano intervalli relativi ("dodici mesi prima") invece di date vere.
-4. **Rileggi il testo.** Un controllo automatico segnala eventuali dati
-   personali rimasti, ma la lettura finale spetta a te.
-5. Copia il testo (c'è un pulsante che conferma "Copied!") e incollalo nel
-   servizio che preferisci. Oppure, se hai configurato una chiave API, puoi
-   inviarlo direttamente — ma vedi l'avvertenza qui sotto.
+3. AHIA minimizza i dati non necessari e sostituisce gli identificatori
+   riconosciuti con token casuali come `[[4E91A75C820DF63B18A05CC7]]`. Il token
+   non indica se rappresenta un paziente, un medico o una struttura.
+4. **Rileggi il payload.** Se noti un dato sfuggito, usa **Segnala un dato non
+   rilevato**, scegli le occorrenze e AHIA le protegge nella richiesta corrente.
+5. Conferma l'esatto testo mostrato. Qualsiasi modifica o nuova sostituzione
+   invalida la conferma e richiede una nuova lettura.
+6. Copia o scarica il payload, oppure invialo direttamente se hai configurato
+   una chiave API.
+7. Incolla in AHIA la risposta ottenuta manualmente, oppure attendi quella
+   dell'invio diretto: i token integri vengono sostituiti localmente con i valori
+   originali. La risposta reidratata contiene di nuovo dati personali.
 
 > **Il punto più delicato dell'app.** AHIA è progettata perché nulla esca dal
-> tuo computer senza un tuo gesto, e perché il testo sia anonimo. Ma questo **non
-> è garantito**: un errore o un bug possono lasciar passare qualcosa. Sui
-> **referti descrittivi** (testo libero) l'anonimizzazione è meno affidabile che
-> sui numeri — un nome di medico o di struttura può sfuggire. Rileggi sempre, con
-> particolare attenzione quando includi visite o ecografie.
+> tuo computer senza un tuo gesto, e perché gli identificatori rilevati siano
+> pseudonimizzati. Ma questo **non è garantito**: un errore o un bug possono
+> lasciar passare qualcosa. La pseudonimizzazione non rende anonimo un quadro
+> clinico raro o riconoscibile dal contesto. Rileggi sempre, con particolare
+> attenzione quando includi visite o ecografie.
+>
+> La mappa dei token vive soltanto nella sessione corrente. Se chiudi AHIA prima
+> di incollare la risposta manuale, non potrà essere ricostruita.
 >
 > **L'invio diretto tramite chiave API non è testato.** Il percorso sicuro e
 > collaudato è quello manuale: copi il testo e lo incolli tu, dopo averlo letto.
@@ -278,8 +286,9 @@ futuri. Vedi la sezione *Referti*.
 Per non lasciare traccia dell'accesso sul dispositivo. Vedi *Primo avvio*.
 
 **Il secondo parere è sicuro?**
-È progettato per esserlo, ma nessuna anonimizzazione automatica è perfetta.
-Rileggi sempre il testo prima di inviarlo. Vedi *Secondo parere*.
+Riduce l'esposizione degli identificatori, ma nessuna rilevazione automatica è
+perfetta e il contesto clinico può restare reidentificabile. Rileggi sempre il
+payload prima di inviarlo. Vedi *Secondo parere*.
 
 **Un valore estratto è sbagliato. Cosa faccio?**
 Confrontalo con il PDF originale. L'estrazione può sbagliare, soprattutto su

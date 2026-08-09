@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "license": "CC0-1.0",
+  "provenance": "Corpus interamente sintetico creato per AHIA; non contiene dati di persone reali.",
+  "cases": [
+    {
+      "id": "nome_da_profilo",
+      "text": "Il paziente Mario Rossi presenta emoglobina 13,2 g/dL.",
+      "profile": {"nome": "Mario Rossi"},
+      "must_not_leak": ["Mario Rossi"],
+      "must_preserve": ["emoglobina 13,2 g/dL"],
+      "expected_types": ["PAZIENTE"]
+    },
+    {
+      "id": "codice_fiscale",
+      "text": "Codice fiscale RSSMRA80A01H501U. TSH 2,4 mUI/L.",
+      "profile": {},
+      "must_not_leak": ["RSSMRA80A01H501U"],
+      "must_preserve": ["TSH 2,4 mUI/L"],
+      "expected_types": ["CODICE_FISCALE"]
+    },
+    {
+      "id": "email",
+      "text": "Contatto: m.rossi+referti@example.it. Ferritina 31 ng/mL.",
+      "profile": {},
+      "must_not_leak": ["m.rossi+referti@example.it"],
+      "must_preserve": ["Ferritina 31 ng/mL"],
+      "expected_types": ["CONTATTO"]
+    },
+    {
+      "id": "cellulare",
+      "text": "Recapito +39 347 1234567; terapia: ramipril 5 mg/die.",
+      "profile": {},
+      "must_not_leak": ["+39 347 1234567"],
+      "must_preserve": ["ramipril 5 mg/die"],
+      "expected_types": ["CONTATTO"]
+    },
+    {
+      "id": "telefono_fisso_ocr",
+      "text": "Tel. 02. 8350.0010\nCreatinina 0,91 mg/dL.",
+      "profile": {},
+      "must_not_leak": ["Tel. 02. 8350.0010"],
+      "must_preserve": ["Creatinina 0,91 mg/dL"],
+      "expected_types": ["CONTATTO"]
+    },
+    {
+      "id": "data_numerica",
+      "text": "Visita del 12/03/2024: pressione 125/78 mmHg.",
+      "profile": {},
+      "must_not_leak": ["12/03/2024"],
+      "must_preserve": ["pressione 125/78 mmHg"],
+      "expected_types": ["DATA_CLINICA"]
+    },
+    {
+      "id": "data_estesa",
+      "text": "Dimesso il 7 settembre 2025 con atorvastatina 20 mg.",
+      "profile": {},
+      "must_not_leak": ["7 settembre 2025"],
+      "must_preserve": ["atorvastatina 20 mg"],
+      "expected_types": ["DATA_CLINICA"]
+    },
+    {
+      "id": "indirizzo",
+      "text": "Residenza: Via Alessandro Volta 12, terapia invariata.",
+      "profile": {},
+      "must_not_leak": ["Via Alessandro Volta 12"],
+      "must_preserve": ["terapia invariata"],
+      "expected_types": ["INDIRIZZO"]
+    },
+    {
+      "id": "numero_referto",
+      "text": "Referto n. AB123456. Glicemia 94 mg/dL.",
+      "profile": {},
+      "must_not_leak": ["AB123456"],
+      "must_preserve": ["Glicemia 94 mg/dL"],
+      "expected_types": ["IDENTIFICATIVO_DOCUMENTO"]
+    },
+    {
+      "id": "identificativo_sanitario_lungo",
+      "text": "Tessera 80380001234567890123; vitamina D 24 ng/mL.",
+      "profile": {},
+      "must_not_leak": ["80380001234567890123"],
+      "must_preserve": ["vitamina D 24 ng/mL"],
+      "expected_types": ["IDENTIFICATIVO_SANITARIO"]
+    },
+    {
+      "id": "struttura_sanitaria",
+      "text": "Ospedale San Marco\nEcografia: fegato nei limiti.",
+      "profile": {},
+      "must_not_leak": ["Ospedale San Marco"],
+      "must_preserve": ["Ecografia: fegato nei limiti"],
+      "expected_types": ["STRUTTURA"]
+    },
+    {
+      "id": "medico_firmatario",
+      "text": "Firmato da Dott.ssa Anna Bianchi\nConclusioni: quadro stabile.",
+      "profile": {},
+      "must_not_leak": ["Dott.ssa Anna Bianchi"],
+      "must_preserve": ["Conclusioni: quadro stabile"],
+      "expected_types": ["MEDICO"]
+    },
+    {
+      "id": "url_struttura",
+      "text": "Portale www.centro-medico.example.it/referti; LDL 108 mg/dL.",
+      "profile": {},
+      "must_not_leak": ["www.centro-medico.example.it/referti"],
+      "must_preserve": ["LDL 108 mg/dL"],
+      "expected_types": ["CONTATTO"]
+    },
+    {
+      "id": "pii_multiple",
+      "text": "Paziente: Giulia Verdi, CF VRDGLI75C41F205X, email giulia.verdi@example.org. Hb 12,8 g/dL.",
+      "profile": {"nome": "Giulia Verdi"},
+      "must_not_leak": ["Giulia Verdi", "VRDGLI75C41F205X", "giulia.verdi@example.org"],
+      "must_preserve": ["Hb 12,8 g/dL"],
+      "expected_types": ["PAZIENTE", "CODICE_FISCALE", "CONTATTO"]
+    },
+    {
+      "id": "stesso_valore_ripetuto",
+      "text": "Mario Neri riferisce che Mario Neri assume metformina 500 mg.",
+      "profile": {"nome": "Mario Neri"},
+      "must_not_leak": ["Mario Neri"],
+      "must_preserve": ["metformina 500 mg"],
+      "expected_types": ["PAZIENTE"],
+      "expected_occurrences": 2,
+      "expected_distinct_tokens": 1
+    },
+    {
+      "id": "negativo_farmaci_e_valori",
+      "text": "HbA1c 6,2%; vitamina B12 430 pg/mL; metformina 1000 mg due volte al giorno.",
+      "profile": {},
+      "must_not_leak": [],
+      "must_preserve": ["HbA1c 6,2%", "vitamina B12 430 pg/mL", "metformina 1000 mg"],
+      "expected_types": []
+    },
+    {
+      "id": "negativo_pattern_clinico",
+      "text": "Pattern epatico conservato; ALT 31 U/L, AST 27 U/L, bilirubina 0,8 mg/dL.",
+      "profile": {},
+      "must_not_leak": [],
+      "must_preserve": ["ALT 31 U/L", "AST 27 U/L", "bilirubina 0,8 mg/dL"],
+      "expected_types": []
+    },
+    {
+      "id": "numero_rea_e_dato_clinico",
+      "text": "R.E.A.: MI-1040877\nSaturazione 98%, frequenza 68 bpm.",
+      "profile": {},
+      "must_not_leak": ["MI-1040877"],
+      "must_preserve": ["Saturazione 98%", "frequenza 68 bpm"],
+      "expected_types": ["IDENTIFICATIVO_DOCUMENTO"]
+    }
+  ]
+}
