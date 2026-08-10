@@ -29,7 +29,11 @@ def main() -> int:
 
     titoli = [x.value for x in at.title]
     didascalie = [x.value for x in at.sidebar.caption]
-    assert "Il tuo archivio sanitario, in locale" in titoli, titoli
+    assert "Inizia dal tuo primo referto" in titoli, titoli
+    carica = next(b for b in at.button if b.label == "Carica un referto")
+    carica.click().run()
+    _verifica(at, "navigazione al primo referto")
+    assert "Caricamento referti" in [x.value for x in at.subheader]
     assert any("Profilo modelli:" in x for x in didascalie), didascalie
     assert any("smokeadmin" in x for x in didascalie), didascalie
     sorgente_impostazioni = f"""

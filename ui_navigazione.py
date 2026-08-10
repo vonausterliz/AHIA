@@ -15,6 +15,17 @@ def _pagina_vuota() -> None:
     """Il contenuto resta in app.py; st.navigation gestisce URL e menu."""
 
 
+PAGINA_REFERTI = st.Page(
+    _pagina_vuota, title="Referti", icon=":material/lab_panel:", url_path="referti"
+)
+PAGINA_ANDAMENTI = st.Page(
+    _pagina_vuota, title="Andamenti", icon=":material/trending_up:", url_path="andamenti"
+)
+PAGINA_ASSISTENTE = st.Page(
+    _pagina_vuota, title="Assistente", icon=":material/assistant:", url_path="assistente"
+)
+
+
 def _logo_svg() -> str:
     """Logo orizzontale nello spazio che Streamlit riserva sopra il menu."""
 
@@ -52,9 +63,9 @@ def costruisci(
     sezioni = {
         "Uso quotidiano": [
             st.Page(_pagina_vuota, title="Home", icon=":material/home:", url_path="home", default=True),
-            st.Page(_pagina_vuota, title="Referti", icon=":material/lab_panel:", url_path="referti"),
-            st.Page(_pagina_vuota, title="Andamenti", icon=":material/trending_up:", url_path="andamenti"),
-            st.Page(_pagina_vuota, title="Assistente", icon=":material/assistant:", url_path="assistente"),
+            PAGINA_REFERTI,
+            PAGINA_ANDAMENTI,
+            PAGINA_ASSISTENTE,
             st.Page(_pagina_vuota, title="Secondo parere", icon=":material/share:", url_path="secondo-parere"),
         ],
         "Gestione": [

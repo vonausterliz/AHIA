@@ -28,6 +28,7 @@ import config
 import configurazione_modelli
 import ui_impostazioni
 import ui_diagnostica
+import ui_modelli_locali
 import ui_navigazione
 import core
 import grafici
@@ -459,26 +460,59 @@ pagina, impostazioni, scelti, emb, nuovo_tool, n_referti, modelli = ui_navigazio
     mostra_avvertenza=lambda: avvertenza(bloccante=False),
 )
 
+# Il pull continua in background ed è visibile in ogni sezione.
+with st.sidebar:
+    ui_modelli_locali.mostra_stato_download()
+
 
 if pagina == "home":
-    st.title("Il tuo archivio sanitario, in locale")
-    st.caption("Le attività più frequenti sono qui; configurazione e diagnostica restano separate.")
-    n_documenti = len(core.elenco_documenti(conn))
-    n_prelievi = core.numero_prelievi(conn)
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Referti", n_documenti)
-    c2.metric("Prelievi", n_prelievi)
-    c3.metric("Modello analisi", scelti["analisi"])
-    st.markdown("### Da dove vuoi iniziare?")
-    st.info("Usa il menu a sinistra: **Referti** per caricare o consultare, **Andamenti** per i valori nel tempo, **Assistente** per leggere e discutere i dati, **Secondo parere** per preparare un invio pseudonimizzato.")
-    recenti = core.elenco_documenti(conn)[:5]
-    if recenti:
+    documenti = core.elenco_documenti(conn)
+    n_documenti = len(documenti)
+
+    if not documenti:
+        st.title("Inizia dal tuo primo referto")
+        st.write(
+            "Carica un PDF: AHIA ne estrae i valori, te li fa controllare e "
+            "costruisce nel tempo uno storico consultabile."
+        )
+        if st.button(
+            "Carica un referto", type="primary",
+            icon=":material/upload_file:", key="home_primo_referto",
+        ):
+            st.switch_page(ui_navigazione.PAGINA_REFERTI)
+        st.caption(
+            ":material/lock: Il documento e i dati estratti restano su questo computer."
+        )
+    else:
+        st.title("Il tuo archivio")
+        n_prelievi = core.numero_prelievi(conn)
+        c1, c2 = st.columns(2)
+        c1.metric("Referti", n_documenti)
+        c2.metric("Prelievi", n_prelievi)
+
+        azioni = st.columns(3)
+        if azioni[0].button(
+            "Carica un referto", icon=":material/upload_file:",
+            width="stretch", key="home_carica_referto",
+        ):
+            st.switch_page(ui_navigazione.PAGINA_REFERTI)
+        if azioni[1].button(
+            "Esplora gli andamenti", icon=":material/trending_up:",
+            width="stretch", key="home_andamenti",
+        ):
+            st.switch_page(ui_navigazione.PAGINA_ANDAMENTI)
+        if azioni[2].button(
+            "Apri l’assistente", icon=":material/assistant:",
+            width="stretch", key="home_assistente",
+        ):
+            st.switch_page(ui_navigazione.PAGINA_ASSISTENTE)
+
         st.markdown("### Referti recenti")
         st.dataframe(pd.DataFrame([{
             "Data": r["data_documento"] or "",
             "Tipo": etichetta(r["tipo"]),
             "Titolo": r["titolo"] or r["nome_file"],
-        } for r in recenti]), hide_index=True, width="stretch")
+        } for r in documenti[:5]]), hide_index=True, width="stretch")
 
 
 # --- Profilo ---------------------------------------------------------------

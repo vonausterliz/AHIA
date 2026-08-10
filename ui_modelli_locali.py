@@ -6,6 +6,7 @@ import streamlit as st
 
 import configurazione_modelli as configurazione
 import core
+import download_modelli
 import hardware_modelli
 
 
@@ -38,25 +39,48 @@ def _conferma_download(
         width="stretch",
         key=f"conferma_{modello}",
     ):
-        barra = st.progress(0.0, text="Avvio del download…")
-        try:
-            for stato in core.scarica_modello(modello):
-                totale = stato.get("total") or 0
-                completato = stato.get("completed") or 0
-                testo = stato.get("status", "")
-                if totale:
-                    testo += (
-                        f" — {completato / totale:.0%} di "
-                        f"{totale / 1e9:.1f} GB"
-                    )
-                barra.progress(
-                    min(completato / totale, 1.0) if totale else 0.0,
-                    text=testo,
-                )
-            st.success(f"{modello} è stato installato.")
+        avviato, messaggio = download_modelli.avvia(modello)
+        if avviato:
+            st.toast(messaggio, icon=":material/download:")
             st.rerun()
-        except core.ErroreOllama as exc:
-            st.error(str(exc))
+        else:
+            st.warning(messaggio)
+
+
+@st.fragment(run_every=1)
+def mostra_stato_download() -> None:
+    """Indicatore globale in sidebar, aggiornato senza rieseguire la pagina."""
+    download = download_modelli.stato()
+    if not download or st.session_state.get("download_nascosto") == download.id:
+        return
+
+    st.caption("DOWNLOAD MODELLO")
+    if download.attivo:
+        testo = download.messaggio
+        if download.totale:
+            testo += f" — {download.frazione:.0%} di {download.totale / 1e9:.1f} GB"
+        st.progress(download.frazione, text=testo)
+        st.caption(f"`{download.modello}` · puoi continuare a usare AHIA")
+        return
+
+    notificato = st.session_state.get("download_notificato")
+    if notificato != download.id:
+        st.session_state["download_notificato"] = download.id
+        if download.fase == "completato":
+            st.toast(f"{download.modello} è stato installato.", icon=":material/check_circle:")
+        else:
+            st.toast(f"Download di {download.modello} non riuscito.", icon=":material/error:")
+        st.rerun(scope="app")
+
+    if download.fase == "completato":
+        st.success(f"{download.modello} installato")
+    else:
+        st.error(f"Download di {download.modello} non riuscito")
+        if download.errore:
+            st.caption(download.errore)
+    if st.button("Nascondi", key=f"nascondi_download_{download.id}"):
+        st.session_state["download_nascosto"] = download.id
+        st.rerun(scope="fragment")
 
 
 def mostra(conn, risolto: dict, disponibili: list[str]) -> None:
@@ -106,11 +130,14 @@ def mostra(conn, risolto: dict, disponibili: list[str]) -> None:
                     consigliato, disponibili):
                 st.success("Installato")
             elif consigliato:
+                download = download_modelli.stato()
+                in_corso = bool(download and download.attivo)
                 if st.button(
-                    "Da installare",
+                    "In download" if in_corso and download.modello == consigliato else "Da installare",
                     icon=":material/download:",
                     key=f"installa_consigliato_{ruolo}_{consigliato}",
                     width="stretch",
+                    disabled=in_corso,
                 ):
                     _conferma_download(consigliato, dati["nome"], hardware)
             else:
