@@ -457,10 +457,9 @@ Richiedono una decisione durante le fasi successive:
    cancellabili; export sanitizzato con anteprima e consenso.
 7. Revisione dei falsi positivi, holdout indipendente, test end-to-end con
    provider simulato e smoke test Ollama locale.
+8. Audit dei log e degli errori provider, isolamento fisico multiutente, ciclo
+   di vita locale della mappa e regressioni sui token alterati.
 
 ### Prossime fasi
-
-8. Audit di log, isolamento multiutente, ciclo di vita della mappa e test su
-   token alterati.
 9. Pilot controllato, revisione UX, metriche locali senza contenuto clinico e
    rilascio graduale.

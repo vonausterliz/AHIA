@@ -5,6 +5,9 @@ import hardware_modelli
 
 
 class HardwareModelliTest(unittest.TestCase):
+    def tearDown(self):
+        hardware_modelli.rileva.cache_clear()
+
     def test_equilibrato_su_12_gb_vram(self):
         hardware = hardware_modelli.ProfiloHardware(
             ram_gb=64,
@@ -75,6 +78,37 @@ class HardwareModelliTest(unittest.TestCase):
 
         self.assertEqual(nome, "GPU A + GPU B")
         self.assertEqual(vram, 20.0)
+
+    @mock.patch("hardware_modelli._amd_vram", return_value=16.0)
+    @mock.patch("hardware_modelli._nvidia", return_value=("", 0.0))
+    @mock.patch("hardware_modelli._ram_totale_gb", return_value=32.0)
+    @mock.patch("hardware_modelli.platform.machine", return_value="x86_64")
+    @mock.patch("hardware_modelli.platform.system", return_value="Linux")
+    def test_rilevazione_amd_linux(self, *_):
+        profilo = hardware_modelli.rileva()
+        self.assertEqual(profilo.gpu, "GPU AMD")
+        self.assertEqual(profilo.vram_gb, 16.0)
+        self.assertFalse(profilo.memoria_unificata)
+
+    @mock.patch("hardware_modelli._ram_totale_gb", return_value=24.0)
+    @mock.patch("hardware_modelli.platform.machine", return_value="arm64")
+    @mock.patch("hardware_modelli.platform.system", return_value="Darwin")
+    def test_rilevazione_apple_silicon(self, *_):
+        profilo = hardware_modelli.rileva()
+        self.assertEqual(profilo.gpu, "Apple Silicon")
+        self.assertEqual(profilo.vram_gb, 24.0)
+        self.assertTrue(profilo.memoria_unificata)
+
+    @mock.patch("hardware_modelli._amd_vram", return_value=0.0)
+    @mock.patch("hardware_modelli._nvidia", return_value=("", 0.0))
+    @mock.patch("hardware_modelli._ram_totale_gb", return_value=16.0)
+    @mock.patch("hardware_modelli.platform.machine", return_value="AMD64")
+    @mock.patch("hardware_modelli.platform.system", return_value="Windows")
+    def test_windows_senza_gpu(self, *_):
+        profilo = hardware_modelli.rileva()
+        self.assertEqual(profilo.architettura, "AMD64")
+        self.assertEqual(profilo.vram_gb, 0.0)
+        self.assertIn("nessuna GPU", profilo.descrizione)
 
 
 if __name__ == "__main__":

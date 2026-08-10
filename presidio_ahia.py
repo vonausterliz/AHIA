@@ -140,7 +140,14 @@ def _accetta_risultato_ner(testo: str, risultato) -> bool:
     valore = testo[risultato.start:risultato.end].strip()
     parole = re.findall(r"[A-Za-zÀ-ÖØ-öø-ÿ']+", valore)
     if risultato.entity_type == "PERSON":
-        return len(parole) >= 2 and all(len(parola) >= 2 for parola in parole)
+        # I nomi nei referti sono normalmente in forma propria o maiuscola.
+        # Frasi cliniche di due parole ("acido folico", "ritmo sinusale")
+        # sono invece un falso positivo frequente del NER generalista.
+        forma_nome = all(
+            parola[0].isupper() or parola.isupper() for parola in parole
+        )
+        return (len(parole) >= 2 and forma_nome
+                and all(len(parola) >= 2 for parola in parole))
     if risultato.entity_type == "LOCATION":
         if len(valore) < 3 or any(carattere.isdigit() for carattere in valore):
             return False

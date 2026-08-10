@@ -30,8 +30,13 @@ cliniche.
 La UI separa sempre **Consigliato** da **In uso**. Se il modello consigliato
 manca, AHIA continua a usare il primo fallback compatibile già installato. Il
 pulsante **Da installare** apre una finestra con ruolo, peso stimato e modalità
-di esecuzione prevista; il download da Ollama parte soltanto con **Conferma e
-scarica**. Sono riconosciute anche le varianti quantizzate dello stesso modello.
+di esecuzione prevista. AHIA controlla prima lo spazio disponibile; con
+**Conferma e scarica** la finestra si chiude e la richiesta entra in una coda
+seriale visibile nel menu. Più modelli possono attendere senza bloccare la
+navigazione. La coda è salvata in `download_modelli.json`, riparte al riavvio e
+offre annullamento e nuovo tentativo. Il trasferimento effettivo dipende dal
+servizio Ollama: se anche Ollama viene chiuso, non prosegue in background. Sono
+riconosciute anche le varianti quantizzate dello stesso modello.
 
 La modalità **Personalizzata** espone prima i quattro ruoli e, in un pannello
 avanzato, le eccezioni per singola funzione. In questa modalità le
@@ -70,3 +75,22 @@ Un modello scomparso dal catalogo resta visibile come scelta non più disponibil
 AHIA segnala il problema e non passa automaticamente a un altro provider o
 modello. Il catalogo indica disponibilità e capacità tecniche, non appropriatezza
 medica né conformità normativa del trattamento.
+
+## Stato delle verifiche
+
+La logica hardware è coperta da test simulati per Linux/AMD, Apple Silicon e
+Windows senza GPU. La CI esegue suite e smoke test su Linux, macOS e Windows;
+resta necessario un riscontro su macchine fisiche diverse da Linux/NVIDIA.
+
+Il confine dati dei tre provider esterni è verificato con client simulati: viene
+inviato soltanto il payload pseudonimizzato e la reidratazione resta locale. Lo
+smoke live, eseguibile esclusivamente con dati sintetici, richiede una chiave e
+una conferma esplicita dei costi:
+
+```bash
+.venv/bin/python tools/smoke_provider_esterni.py --conferma-costi
+```
+
+Nell'ambiente di sviluppo corrente non erano presenti chiavi di test, quindi
+non viene dichiarato alcun collaudo reale. La valutazione preliminare dei
+modelli locali è descritta in [Valutazione sintetica dei modelli](VALUTAZIONE_MODELLI.md).

@@ -33,6 +33,21 @@ class SecondoParereE2ETest(unittest.TestCase):
         self.assertFalse(esito.token_sconosciuti)
         self.assertFalse(esito.token_malformati)
 
+    def test_token_alterato_non_viene_reidratato_per_approssimazione(self):
+        testo = "Paziente Ada Quercia: quadro stabile."
+        inizio = testo.index("Ada Quercia")
+        entita = [pseudo.Entita(
+            inizio, inizio + len("Ada Quercia"), "PAZIENTE", fonte="manuale"
+        )]
+
+        def provider(payload):
+            token = pseudo.TOKEN_RE.search(payload).group(0)
+            return token[:-3] + "XX]]"
+
+        esito = secondo_parere_e2e.esegui(testo, entita, provider)
+        self.assertNotIn("Ada Quercia", esito.risposta_reidratata)
+        self.assertTrue(esito.token_malformati)
+
 
 if __name__ == "__main__":
     unittest.main()

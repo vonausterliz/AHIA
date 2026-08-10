@@ -3,6 +3,26 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.26.0 — 10 agosto 2026
+
+### Download persistenti, portabilità e audit privacy
+
+- **Coda download non bloccante.** Dopo la conferma la finestra si chiude; più
+  modelli possono essere accodati e lo stato resta visibile nel menu mentre si
+  usa il resto dell'app.
+- **Ripresa e controllo.** La coda sopravvive al riavvio di AHIA, riprende le
+  attività incomplete, controlla lo spazio libero e consente annullamento e
+  nuovo tentativo. Chiudere anche Ollama interrompe invece il trasferimento.
+- **Pacchetto portabile.** Aggiunti il generatore di ZIP puliti con manifest
+  SHA-256 e una matrice CI per Linux, macOS e Windows con Python 3.10 e 3.12.
+- **Audit privacy.** I dettagli liberi non entrano più nel registro eventi, i
+  corpi degli errori HTTP dei provider non vengono propagati e i test verificano
+  isolamento degli archivi, payload pseudonimizzati e token alterati.
+- **PII e qualità.** Il corpus di sviluppo supera ancora tutti i gate; sul
+  holdout congelato i leak sintetici scendono da 9 a 0. Una valutazione
+  preliminare automatizzata su cinque casi sintetici è superata da
+  qwen3:14b e qwen3:30b-instruct; non costituisce validazione clinica.
+
 
 ## 1.25.0 — 10 agosto 2026
 

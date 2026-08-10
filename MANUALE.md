@@ -108,7 +108,11 @@ pseudonimizzazione del secondo parere, che lavora sul testo salvato.
 *Nota tecnica.* Prima di elaborare, AHIA controlla che i modelli scelti siano
 installati in Ollama. I modelli si configurano in **Impostazioni → Modelli e
 provider**: se manca un consiglio, premi **Da installare**, controlla dimensione
-e modalità di esecuzione previste e conferma il download. La modalità automatica
+e modalità di esecuzione previste e conferma il download. La finestra si chiude
+subito: avanzamento e richieste in attesa compaiono nel menu, da cui puoi
+annullare o riprovare. Puoi accodare più modelli e usare le altre pagine nel
+frattempo; la coda incompleta riparte al riavvio di AHIA se Ollama è attivo.
+La modalità automatica
 usa quattro ruoli; le eccezioni per singola funzione restano disponibili nel
 pannello avanzato.
 
@@ -230,7 +234,10 @@ rilevazione non usa la rete, non salva identificativi hardware ed è disattivabi
 Il modello consigliato e quello in uso sono distinti. Se il consiglio non è
 ancora presente, AHIA usa il miglior fallback compatibile già installato e
 mostra **Da installare**. Il pulsante apre una conferma con peso stimato e
-modalità di esecuzione prevista; soltanto **Conferma e scarica** contatta Ollama.
+modalità di esecuzione prevista e spazio disponibile; soltanto **Conferma e
+scarica** accoda la richiesta. Il popup si chiude, un solo download procede alla
+volta e gli altri attendono nel menu. La coda è persistente e offre annullamento
+e nuovo tentativo.
 Una quantizzazione compatibile dello stesso modello viene riconosciuta come già
 installata. La modalità Personalizzata mantiene le eccezioni per singola
 funzione e mostra i consigli senza sovrascriverle.

@@ -5,6 +5,7 @@ __pycache__/
 .pytest_cache/
 .coverage
 htmlcov/
+builds/
 
 # Dati sanitari locali se AHIA_DATA_DIR viene puntata nel progetto.
 .ahia/

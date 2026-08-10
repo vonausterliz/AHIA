@@ -4,97 +4,69 @@ Aggiornato al **10 agosto 2026**.
 
 ## Punto raggiunto
 
-La versione corrente è **1.25.0**. Succede alla revisione `86dc7ae`, che aveva
-introdotto la nuova interfaccia e i cataloghi modelli della v1.24.0. La 1.25.0
-comprende:
+La versione corrente è **1.26.0**. Comprende:
 
-- rilevazione locale di RAM, VRAM NVIDIA/AMD e memoria unificata Apple;
-- raccomandazioni Ollama diverse per macchina e per priorità (Equilibrato,
-  Più veloce, Massima qualità);
-- distinzione tra modello consigliato e modello effettivamente in uso, con
-  fallback verso un modello compatibile già installato;
-- riconoscimento delle varianti quantizzate già presenti;
-- pulsante **Da installare** con conferma esplicita, peso stimato e modalità di
-  esecuzione prevista prima del download;
-- logo orizzontale AHIA, descrizione e versione nello slot nativo Streamlit
-  sopra il menu;
-- documentazione e changelog aggiornati.
+- coda seriale dei download Ollama, non bloccante e visibile nel menu;
+- persistenza e ripresa dopo il riavvio di AHIA, controllo dello spazio libero,
+  annullamento e nuovo tentativo;
+- generatore di ZIP portabile con esclusione di dati, segreti, virtualenv e
+  cache, più manifest SHA-256;
+- matrice CI per Linux, macOS e Windows con Python 3.10 e 3.12;
+- hardening di log, errori provider, isolamento multiutente e token alterati;
+- riconoscimento più ampio degli identificativi documentali;
+- valutazione tecnica preliminare di due modelli locali su casi sintetici.
 
-Sulla macchina di sviluppo AHIA rileva circa **60 GB di RAM** e una
-**NVIDIA GeForce RTX 3060 con 12 GB di VRAM**. Con il profilo Equilibrato
-propone:
+## Verifiche eseguite
 
-| Ruolo | Modello consigliato |
-|---|---|
-| Operazioni rapide | `qwen3:8b` |
-| Analisi approfondita | `qwen3:14b` |
-| Visione e scansioni | `qwen3-vl:8b` |
-| Ricerca semantica | `bge-m3` |
-
-## Verifiche già eseguite
-
-- compilazione Python dei moduli modificati: superata;
-- suite automatica: **56 test su 56 superati**;
-- smoke test Streamlit: bootstrap, accesso, menu, Home, raccomandazioni
-  hardware e apertura della conferma di download superati;
-- nessun modello è stato scaricato durante lo smoke test;
+- compilazione di tutti i moduli Python: superata;
+- suite automatica: **75 test su 75 superati**;
+- smoke Streamlit autenticato: superato, inclusi Home, hardware e conferma
+  download;
+- corpus PII di sviluppo: recall, precisione e tipo 100%, zero leak, zero errori
+  di preservazione e round-trip;
+- holdout PII congelato: recall 100%, precisione 90,59%, zero leak e zero errori
+  di round-trip; restano **8 errori di preservazione**, quindi il gate complessivo
+  non è superato;
+- OpenAI, Anthropic e OpenRouter: confine dati verificato con client simulati e
+  payload esclusivamente pseudonimizzati;
+- `qwen3:14b` e `qwen3:30b-instruct`: 5/5 casi sintetici superati con i prompt
+  reali di AHIA. È un controllo tecnico, non una validazione clinica;
 - `git diff --check`: superato.
 
-## Controllo manuale di domani
+## Portabilità
 
-1. Riavviare Streamlit e ricaricare la pagina senza cache.
-2. Verificare che logo, nome AHIA, descrizione e versione siano realmente
-   **sopra** le sezioni del menu.
-3. Aprire **Impostazioni → Modelli e provider** e controllare leggibilità e
-   allineamento delle quattro raccomandazioni.
-4. Premere **Da installare** e verificare che il primo clic apra soltanto la
-   conferma; **Annulla** non deve avviare traffico o download.
-5. Se si desidera collaudare un pull reale, confermare un solo modello mancante
-   e verificare avanzamento, completamento, aggiornamento dello stato e fallback.
-6. Cambiare priorità tra Equilibrato, Più veloce e Massima qualità e controllare
-   che i consigli cambino senza download automatici.
-7. Passare a Personalizzata e verificare che i consigli restino informativi e
-   non sovrascrivano le scelte dell'utente.
+La logica di rilevazione hardware è coperta da test simulati per AMD/Linux,
+Apple Silicon e Windows senza GPU. La CI multipiattaforma è pronta, ma i job
+remoti saranno eseguiti solo dopo il push. Il riscontro fisico svolto in locale
+resta Linux/NVIDIA; Mac, Windows e AMD reali richiedono le rispettive macchine.
 
-## Verifiche successive alla 1.25.0
+Il pacchetto si crea con:
 
-- completare il controllo manuale sopra;
-- decidere se eseguire un download Ollama reale (lo smoke verifica la conferma,
-  non il trasferimento completo);
-- correggere eventuali dettagli visivi emersi dal controllo.
+```bash
+.venv/bin/python tools/crea_pacchetto.py
+```
 
-## Lavoro successivo consigliato
+Su un albero modificato si può produrre soltanto una build dichiaratamente di
+test usando `--consenti-modifiche`. Sul computer di destinazione vanno
+installati Ollama e i modelli; database e referti non sono inclusi nello ZIP.
 
-### Privacy e qualità clinica
+## Limiti aperti
 
-- Migliorare il corpus holdout congelato della pseudonimizzazione: l'ultimo
-  rapporto registra recall **88,46%**, precisione **87,18%**, 9 leak sintetici
-  e 9 errori di conservazione. Il corpus principale da 180 casi supera invece
-  tutti i gate.
-- Eseguire una valutazione clinica dedicata dei modelli. AHIA distingue
-  disponibilità e compatibilità tecnica dalla validazione clinica e, al
-  momento, non dichiara clinicamente validato alcun modello.
-- Collaudare end-to-end OpenAI, Anthropic e OpenRouter con account di test e
-  dati esclusivamente sintetici. L'integrazione è implementata, ma non è stata
-  ancora verificata contro i servizi reali.
-
-### Robustezza e portabilità
-
-- Verificare la rilevazione hardware su macchine reali Apple Silicon, AMD,
-  Windows e sistemi senza GPU; questi casi sono coperti da test simulati, mentre
-  il riscontro reale attuale è NVIDIA/Linux.
-- Aggiungere, come hardening, un controllo dello spazio libero prima del pull e
-  una gestione più esplicita dell'interruzione di un download in corso.
-- Considerare un benchmark locale facoltativo: oggi le raccomandazioni sono
-  conservative e basate soprattutto sulla memoria, non sulla velocità misurata.
+- Nessuna chiave di test OpenAI, Anthropic o OpenRouter era disponibile: lo
+  smoke live è predisposto ma non è stato eseguito contro servizi reali.
+- Nessun modello è clinicamente validato. Servono protocollo preregistrato,
+  revisori clinici indipendenti e un campione adeguato.
+- Gli otto falsi positivi del holdout PII richiedono ulteriore lavoro basato su
+  nuovi casi di sviluppo, senza adattare le regole al corpus congelato.
+- Chiudere soltanto la scheda del browser non ferma il server e il download
+  continua. Se si arresta il processo AHIA, il trasferimento corrente si ferma
+  e viene ripreso al successivo avvio; senza il servizio Ollama non può procedere.
 
 ## Decisioni consolidate
 
-- Il Secondo parere usa **pseudonimizzazione reversibile**, non anonimizzazione.
-- I token inviati al modello sono opachi e non rivelano ruolo o categoria della
-  persona; la reidratazione avviene soltanto in AHIA.
-- L'utente può segnalare PII non rilevate e gestire regole personali cifrate.
-- La storia clinica minimizzata può comunque essere identificante: il controllo
-  umano del payload e la scelta del provider restano obbligatori.
+- Il Secondo parere usa pseudonimizzazione reversibile, non anonimizzazione.
+- La reidratazione avviene soltanto in AHIA e mai per somiglianza approssimata.
+- I dettagli liberi non vengono salvati nei log salvo marcatura esplicita come
+  sicuri.
 - Le raccomandazioni hardware non installano nulla automaticamente e non
-  modificano le configurazioni personalizzate.
+  sovrascrivono le configurazioni personalizzate.

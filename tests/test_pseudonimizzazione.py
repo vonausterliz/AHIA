@@ -5,6 +5,22 @@ import pseudonimizzazione as ps
 
 
 class MotorePseudonimizzazioneTest(unittest.TestCase):
+    def test_identificativi_etichettati_con_formati_eterogenei(self):
+        esempi = {
+            "Richiesta numero RX/2026-991-A": "RX/2026-991-A",
+            "Barcode: LAB_77-9912": "LAB_77-9912",
+            "Campione # 26.08.12345": "26.08.12345",
+            "Documento ID: AB-991/XY": "AB-991/XY",
+        }
+        for testo, valore in esempi.items():
+            with self.subTest(testo=testo):
+                rilevate = ps.rileva_legacy(testo)
+                self.assertTrue(any(
+                    entita.tipo == "IDENTIFICATIVO_DOCUMENTO"
+                    and testo[entita.start:entita.end].endswith(valore)
+                    for entita in rilevate
+                ))
+
     def test_token_opaco_e_round_trip(self):
         testo = "Il paziente Mario Rossi vive a Roma."
         entita = [

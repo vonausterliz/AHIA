@@ -7,6 +7,20 @@ import presidio_ahia
 
 
 class PresidioAdapterTest(unittest.TestCase):
+    def test_persona_richiede_forma_da_nome_proprio(self):
+        risultato = SimpleNamespace(
+            start=0, end=len("Acido folico"), entity_type="PERSON", score=0.9
+        )
+        self.assertFalse(
+            presidio_ahia._accetta_risultato_ner("Acido folico 8 ng/mL", risultato)
+        )
+        nome = SimpleNamespace(
+            start=0, end=len("Mario Rossi"), entity_type="PERSON", score=0.9
+        )
+        self.assertTrue(
+            presidio_ahia._accetta_risultato_ner("Mario Rossi", nome)
+        )
+
     def tearDown(self):
         presidio_ahia._reset_cache_per_test()
 

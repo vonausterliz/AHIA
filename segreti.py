@@ -180,18 +180,16 @@ def _chiama(url: str, intestazioni: dict, payload: dict) -> dict:
         with urllib.request.urlopen(req, timeout=TIMEOUT_API) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        corpo = e.read().decode("utf-8", "replace")
-        try:
-            messaggio = json.loads(corpo).get("error", {}).get("message", corpo)
-        except json.JSONDecodeError:
-            messaggio = corpo
+        # Il corpo del provider non viene riportato: potrebbe riflettere parti
+        # del payload pseudonimizzato o altri dettagli dell'account.
+        e.read()
         if e.code in (401, 403):
             raise ErroreAPI("Chiave API rifiutata: controlla che sia corretta e "
                             "attiva.") from e
         if e.code == 429:
             raise ErroreAPI("Limite di richieste o credito esaurito presso il "
                             "fornitore.") from e
-        raise ErroreAPI(f"Errore {e.code}: {messaggio[:200]}") from e
+        raise ErroreAPI(f"Errore HTTP {e.code} restituito dal fornitore.") from e
     except urllib.error.URLError as e:
         raise ErroreAPI(f"Connessione non riuscita: {e.reason}. Questo invio "
                         "richiede internet.") from e

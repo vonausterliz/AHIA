@@ -549,13 +549,14 @@ def leggi_testo(conn, sha: str) -> str:
 def registra_evento(conn, tipo: str, *, categoria: str = "", esito: str = "ok",
                     modello: str = "", durata_s: float | None = None,
                     token_in: int | None = None, token_out: int | None = None,
-                    dettaglio: str = "") -> None:
+                    dettaglio: str = "", dettaglio_sicuro: bool = False) -> None:
     """Scrive una riga nel registro eventi (osservabilità).
 
-    IMPORTANTE: `dettaglio` è solo per note tecniche e messaggi d'errore. Non
-    deve MAI contenere testo di referti, valori clinici o dati personali — il
-    registro è diagnostica, non un archivio dei contenuti. Best-effort: se la
-    scrittura fallisce, l'operazione principale non deve risentirne.
+    Per impostazione predefinita ``dettaglio`` non viene conservato: gli errori
+    di modelli e provider possono incorporare parti dell'input. Soltanto una
+    stringa costruita dal programma e dichiarata esplicitamente sicura può
+    entrare nel registro. Best-effort: un errore di scrittura non influenza
+    l'operazione principale.
     """
     try:
         conn.execute(
@@ -564,7 +565,7 @@ def registra_evento(conn, tipo: str, *, categoria: str = "", esito: str = "ok",
                 dettaglio)
                VALUES (?,?,?,?,?,?,?,?)""",
             (tipo, categoria, esito, modello, durata_s, token_in, token_out,
-             (dettaglio or "")[:500]))
+             (dettaglio or "")[:500] if dettaglio_sicuro else ""))
         conn.commit()
     except sqlite3.Error:
         pass

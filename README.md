@@ -101,10 +101,10 @@ appuntamenti.
 > errato o improprio. L'utilizzo avviene **a rischio esclusivo** di chi usa
 > l'applicazione. Rileggi sempre ciò che stai per inviare.
 >
-> **L'integrazione con i modelli di frontiera tramite chiave API (Claude,
-> ChatGPT) non è testata** contro i servizi reali: è implementata ma non
-> verificata, potrebbe non funzionare o comportarsi in modo inatteso. Il
-> percorso collaudato è quello manuale — copi il testo e lo incolli tu.
+> L'integrazione con OpenAI, Anthropic e OpenRouter è verificata con provider
+> simulati e payload sintetici, ma **non è ancora collaudata contro i servizi
+> reali**: potrebbe non funzionare o comportarsi in modo inatteso. Il percorso
+> più prudente resta quello manuale — copi il testo e lo incolli tu.
 
 ---
 
@@ -127,8 +127,10 @@ quindi l'installazione non compila nulla.
 In **Impostazioni → Modelli e provider** la modalità automatica rileva localmente
 RAM, VRAM o memoria unificata e propone quattro modelli proporzionati alla
 macchina. Se un consiglio non è presente, **Da installare** apre un riepilogo e
-richiede conferma prima di avviare il download con Ollama. Nel frattempo AHIA
-continua a usare un modello compatibile già installato. Sono disponibili tre
+richiede conferma prima di accodare il download con Ollama. La finestra si
+chiude subito; avanzamento e coda restano nel menu mentre continui a usare AHIA.
+Le richieste incomplete ripartono al riavvio dell'app, purché Ollama sia attivo.
+Nel frattempo AHIA continua a usare un modello compatibile già installato. Sono disponibili tre
 priorità: Equilibrato, Più veloce e Massima qualità; la modalità Personalizzata
 mantiene la scelta per ruolo e le eccezioni per singola funzione.
 
@@ -234,6 +236,21 @@ cd ahia && python -m venv .venv && .venv\Scripts\activate && pip install -r requ
 ```
 
 L'app risponde su `http://localhost:8501`.
+
+### Spostare AHIA su un altro computer
+
+Per creare uno ZIP del solo programma, senza virtualenv, database, referti,
+chiavi o cache locali:
+
+```bash
+.venv/bin/python tools/crea_pacchetto.py
+```
+
+Trasferisci il file prodotto in `builds/`, installa Ollama sul computer di
+destinazione, scompatta lo ZIP e usa `avvia.sh` oppure `avvia.bat`. I modelli
+Ollama vanno riscaricati sulla nuova macchina. Il manifest incluso riporta gli
+SHA-256 dei file; per sicurezza lo script rifiuta un albero Git con modifiche
+non salvate, salvo l'opzione esplicita `--consenti-modifiche` per build di test.
 
 ### Presidio italiano (facoltativo ma consigliato)
 
@@ -502,5 +519,5 @@ available in both Italian and English.
 It is experimental software, not a medical device, and does not replace a
 physician. It is provided "as is", without warranty of any kind, and the author
 accepts no liability for any data shared with third parties, for malfunctions of
-the software or third-party components, or for improper use. The frontier-model
-API integration (Claude, ChatGPT) is implemented but untested.
+the software or third-party components, or for improper use. The OpenAI, Anthropic and OpenRouter data boundary is covered by simulated
+tests, but the integrations have not yet been exercised against live services.

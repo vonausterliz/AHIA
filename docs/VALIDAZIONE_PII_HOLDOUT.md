@@ -46,6 +46,26 @@ devono nascere da casi di sviluppo o segnalazioni revisionate; una nuova misura
 su questo file serve a confrontare le versioni, non costituisce più una prova
 cieca.
 
+## Confronto con AHIA 1.26.0
+
+Il corpus non è stato modificato: l'impronta SHA-256 sopra è invariata. Le
+correzioni sono nate dal corpus di sviluppo e da regole generali; il holdout è
+stato misurato soltanto dopo l'implementazione.
+
+| Metrica | Baseline 1.23 | AHIA 1.26.0 |
+|---|---:|---:|
+| Recall complessiva | 88,46% | 100,00% |
+| Precisione degli span | 87,18% | 90,59% |
+| Accuratezza del tipo | 84,62% | 96,15% |
+| Leak annotati | 9 | 0 |
+| Errori di preservazione | 9 | 8 |
+| Errori di round-trip | 0 | 0 |
+
+La v1.26 elimina i leak annotati e riconosce gli identificativi documentali
+eterogenei che mancavano. Il risultato **non supera ancora tutti i gate**:
+restano otto falsi positivi che alterano termini clinici e richiedono revisione
+umana. Non viene quindi presentato come una validazione conclusa.
+
 ## Proprietà già verificate
 
 - Nessuna PII o annotazione proviene da persone reali.

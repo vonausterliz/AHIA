@@ -362,10 +362,16 @@ _PATTERN_LEGACY: list[tuple[str, re.Pattern[str], float]] = [
      re.compile(r"\b(?:via|viale|piazza|corso|largo|vicolo)\s+"
                 r"[\wÀ-ÿ' .-]+?\s*\d*(?=$|[,;\n])", re.I | re.M), 0.82),
     ("IDENTIFICATIVO_DOCUMENTO",
-     re.compile(r"\b(?:referto|refert[oi]|nr|n[°.]?|prot(?:ocollo)?|"
-                r"accettazione|acc|pratica|cartella|nosologic[oa]|id|codice|"
-                r"episodio|prestazion[ei]|ricovero|impegnativa)\.?\s*"
-                r"[:n°.\\/i]*\s*[A-Z]{0,3}\d[\w./-]*", re.I), 0.92),
+     re.compile(
+         r"\b(?:referto|refert[oi]|nr|n[°.]?|prot(?:ocollo)?|accettazione|"
+         r"acc|pratica|cartella|nosologic[oa]|id|codice|episodio|"
+         r"prestazion[ei]|ricovero|impegnativa|richiesta|ordine|documento|"
+         r"campione|barcode|accession)\.?\s*"
+         r"(?:(?:n(?:umero)?|n[°.]|cod(?:ice)?|id)\s*)?[:#./-]?\s*"
+         r"(?=[A-Z0-9._/-]{5,}\b)(?=[A-Z0-9._/-]*\d)"
+         r"[A-Z0-9][A-Z0-9._/-]*",
+         re.I,
+     ), 0.92),
     ("IDENTIFICATIVO_DOCUMENTO",
      re.compile(r"\b[A-Z]{1,3}\d{5,}\b"), 0.82),
     ("IDENTIFICATIVO_SANITARIO",

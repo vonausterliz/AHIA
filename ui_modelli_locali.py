@@ -19,8 +19,18 @@ def _conferma_download(
     info = hardware_modelli.MODELLI.get(modello)
     st.markdown(f"### `{modello}`")
     st.write(f"Ruolo: **{ruolo}**")
+    dimensione_gb = info.dimensione_gb if info else 0.0
     if info:
-        st.write(f"Download stimato: **{info.dimensione_gb:g} GB** · {info.nota}")
+        st.write(f"Download stimato: **{dimensione_gb:g} GB** · {info.nota}")
+        spazio_ok, dettaglio_spazio = download_modelli.verifica_spazio(
+            dimensione_gb
+        )
+        if spazio_ok:
+            st.caption(f":material/hard_drive: {dettaglio_spazio}")
+        else:
+            st.error(dettaglio_spazio)
+    else:
+        spazio_ok = True
     st.write(
         "Esecuzione prevista su questa macchina: "
         f"**{hardware_modelli.esecuzione_prevista(hardware, modello)}**."
@@ -44,8 +54,11 @@ def _conferma_download(
         icon=":material/download:",
         width="stretch",
         key=f"conferma_{modello}",
+        disabled=not spazio_ok,
     ):
-        avviato, messaggio = download_modelli.avvia(modello)
+        avviato, messaggio = download_modelli.avvia(
+            modello, dimensione_gb=dimensione_gb
+        )
         if avviato:
             st.toast(messaggio, icon=":material/download:")
             st.rerun()
@@ -55,11 +68,13 @@ def _conferma_download(
 
 @st.fragment(run_every=1)
 def mostra_stato_download() -> None:
-    """Coda globale in sidebar, aggiornata senza rieseguire la pagina."""
+    """Coda globale persistente, aggiornata senza rieseguire la pagina."""
+    download_modelli.riprendi()
     attivita = download_modelli.stati()
-    if not attivita:
+    errore_stato = download_modelli.errore_persistenza()
+    if not attivita and not errore_stato:
         return
-    id_coda = attivita[-1].id
+    id_coda = attivita[-1].id if attivita else 0
     if st.session_state.get("download_coda_nascosta") == id_coda:
         return
 
@@ -74,6 +89,11 @@ def mostra_stato_download() -> None:
                 f"{elemento.modello} è stato installato.",
                 icon=":material/check_circle:",
             )
+        elif elemento.fase == "annullato":
+            st.toast(
+                f"Download di {elemento.modello} annullato.",
+                icon=":material/cancel:",
+            )
         else:
             st.toast(
                 f"Download di {elemento.modello} non riuscito.",
@@ -83,10 +103,11 @@ def mostra_stato_download() -> None:
     if conclusi_nuovi:
         st.session_state["download_notificati"] = list(notificati)
         if not any(elemento.pendente for elemento in attivita):
-            # A coda conclusa rilegge i modelli e aggiorna i fallback.
             st.rerun(scope="app")
 
     st.caption("DOWNLOAD MODELLI")
+    if errore_stato:
+        st.warning(errore_stato)
     corrente = next((x for x in attivita if x.attivo), None)
     in_coda = [x for x in attivita if x.fase == "in_coda"]
     if corrente:
@@ -101,21 +122,43 @@ def mostra_stato_download() -> None:
     if in_coda:
         nomi = " → ".join(f"`{x.modello}`" for x in in_coda)
         st.caption(f"In coda ({len(in_coda)}): {nomi}")
-    if corrente or in_coda:
-        st.caption("Puoi continuare a usare AHIA.")
-        errori = sum(x.fase == "errore" for x in attivita)
-        if errori:
-            st.caption(f":material/error: {errori} download non riusciti")
+
+    pendenti = [x for x in attivita if x.pendente]
+    if pendenti:
+        with st.expander("Gestisci coda", icon=":material/format_list_numbered:"):
+            for elemento in pendenti:
+                riga, azione = st.columns([3, 1])
+                riga.caption(
+                    f"{elemento.modello} · "
+                    f"{'in corso' if elemento.attivo else 'in attesa'}"
+                )
+                if azione.button(
+                    "", icon=":material/cancel:",
+                    help=f"Annulla {elemento.modello}",
+                    key=f"annulla_download_{elemento.id}",
+                ):
+                    download_modelli.annulla(elemento.id)
+                    st.rerun(scope="fragment")
+        st.caption("La coda viene recuperata al riavvio di AHIA.")
         return
 
     completati = sum(x.fase == "completato" for x in attivita)
-    errori = [x for x in attivita if x.fase == "errore"]
+    falliti = [x for x in attivita if x.fase == "errore"]
+    annullati = sum(x.fase == "annullato" for x in attivita)
     if completati:
         st.success(f"Modelli installati: {completati}")
-    for elemento in errori:
+    if annullati:
+        st.caption(f"Download annullati: {annullati}")
+    for elemento in falliti:
         st.error(f"{elemento.modello}: download non riuscito")
         if elemento.errore:
             st.caption(elemento.errore)
+        if st.button(
+            "Riprova", icon=":material/refresh:",
+            key=f"riprova_download_{elemento.id}",
+        ):
+            download_modelli.riprova(elemento.id)
+            st.rerun(scope="fragment")
     if st.button("Nascondi", key=f"nascondi_coda_{id_coda}"):
         st.session_state["download_coda_nascosta"] = id_coda
         st.rerun(scope="fragment")
