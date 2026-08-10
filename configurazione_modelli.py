@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from typing import Any
 
 import config
+import hardware_modelli
 
 
 RUOLI = {
@@ -84,16 +85,25 @@ def _ha_capacita(elemento: Any, capacita: str) -> bool:
     return True
 
 
+def modello_installato(
+    candidato: str, disponibili: Iterable[Any]
+) -> str | None:
+    prefisso = candidato.lower().removesuffix(":latest")
+    for elemento in disponibili:
+        nome = _nome(elemento)
+        basso = nome.lower().removesuffix(":latest")
+        if (basso == prefisso or basso.startswith(f"{prefisso}:")
+                or basso.startswith(f"{prefisso}-")):
+            return nome
+    return None
+
+
 def _trova(disponibili: Iterable[Any], candidati: Iterable[str], capacita: str) -> str | None:
     elementi = list(disponibili)
     compatibili = [x for x in elementi if _ha_capacita(x, capacita)]
     for candidato in candidati:
-        prefisso = candidato.lower().removesuffix(":latest")
-        for elemento in compatibili:
-            nome = _nome(elemento)
-            basso = nome.lower().removesuffix(":latest")
-            if basso == prefisso or basso.startswith(f"{prefisso}:"):
-                return nome
+        if trovato := modello_installato(candidato, compatibili):
+            return trovato
     return _nome(compatibili[0]) if compatibili else None
 
 
@@ -102,11 +112,21 @@ def compatibili_per_ruolo(disponibili: Iterable[Any], ruolo: str) -> list[str]:
     return [_nome(x) for x in disponibili if _ha_capacita(x, capacita)]
 
 
-def assegna_ruoli(disponibili: Iterable[Any], profilo: str = "equilibrato") -> dict[str, str | None]:
+def assegna_ruoli(
+    disponibili: Iterable[Any],
+    profilo: str = "equilibrato",
+    raccomandati: dict[str, str] | None = None,
+) -> dict[str, str | None]:
     profilo = profilo if profilo in PROFILI else "equilibrato"
     elementi = list(disponibili)
+    preferenze = raccomandati or {}
+    candidati = {
+        ruolo: ((preferenze[ruolo],) if preferenze.get(ruolo) else ())
+        + CANDIDATI[profilo][ruolo]
+        for ruolo in RUOLI
+    }
     return {
-        ruolo: _trova(elementi, CANDIDATI[profilo][ruolo], ruolo)
+        ruolo: _trova(elementi, candidati[ruolo], ruolo)
         for ruolo in RUOLI
     }
 
@@ -120,7 +140,11 @@ def modalita(conn) -> str:
     return "automatico"
 
 
-def risolvi(conn, disponibili: Iterable[Any]) -> dict[str, Any]:
+def risolvi(
+    conn,
+    disponibili: Iterable[Any],
+    profilo_hardware: hardware_modelli.ProfiloHardware | None = None,
+) -> dict[str, Any]:
     """Restituisce scelte per funzione, embedding e metadati per la UI."""
 
     elementi = list(disponibili)
@@ -128,7 +152,13 @@ def risolvi(conn, disponibili: Iterable[Any]) -> dict[str, Any]:
     profilo = _leggi(conn, "modelli.profilo", "equilibrato")
     if profilo not in PROFILI:
         profilo = "equilibrato"
-    ruoli = assegna_ruoli(elementi, profilo)
+    hardware_attivo = _leggi(conn, "modelli.hardware", "1") == "1"
+    hardware = profilo_hardware or hardware_modelli.rileva()
+    raccomandati = (
+        hardware_modelli.raccomanda(hardware, profilo)
+        if hardware_attivo else {}
+    )
+    ruoli = assegna_ruoli(elementi, profilo, raccomandati)
     if modo == "personalizzato":
         for ruolo in RUOLI:
             ruoli[ruolo] = _leggi(conn, f"modelli.ruolo.{ruolo}", ruoli.get(ruolo))
@@ -152,6 +182,9 @@ def risolvi(conn, disponibili: Iterable[Any]) -> dict[str, Any]:
         "ruoli": ruoli,
         "scelte": scelte,
         "embedding": embedding,
+        "hardware_attivo": hardware_attivo,
+        "hardware": hardware,
+        "raccomandati": raccomandati,
     }
 
 

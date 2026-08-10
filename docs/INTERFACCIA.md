@@ -1,6 +1,6 @@
 # Architettura dell'interfaccia
 
-La revisione 1.24 parte da una distinzione semplice: le scelte quotidiane devono
+La revisione 1.25 parte da una distinzione semplice: le scelte quotidiane devono
 restare vicine al compito; quelle rare o tecniche devono essere raggiungibili,
 ma non occupare sempre lo schermo.
 
@@ -28,8 +28,9 @@ Impostazioni
 └── Guida
 ```
 
-La barra laterale non configura più nove funzioni LLM. Mostra navigazione, stato
-locale, profilo modelli, identità e uscita.
+La barra laterale non configura più nove funzioni LLM. Logo, nome AHIA e versione
+precedono il menu; stato locale, profilo modelli, identità dell’utente e uscita
+restano in coda alla navigazione.
 
 ## Collocazione delle scelte
 
@@ -63,3 +64,9 @@ Personalizzata espone gli stessi ruoli; soltanto un ulteriore pannello mostra le
 eccezioni per singola funzione. Gli archivi con vecchie eccezioni entrano
 direttamente in Personalizzata, così nessuna scelta viene persa o cambiata in
 silenzio.
+
+I quattro consigli automatici sono proporzionati alla memoria rilevata sulla
+macchina. Ogni riga distingue il modello attualmente in uso dal consiglio e
+presenta l’installazione mancante come azione contestuale. La finestra di
+conferma rende visibili dimensione stimata e collocazione prevista (GPU, memoria
+unificata o RAM) prima che inizi il download.

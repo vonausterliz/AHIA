@@ -4,6 +4,16 @@ Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
 
+## 1.25.0 — 10 agosto 2026
+
+### Raccomandazioni hardware e installazione guidata
+
+- **Rilevazione interamente locale.** AHIA considera RAM, VRAM NVIDIA o AMD e memoria unificata Apple per calibrare i quattro modelli consigliati. La funzione è attiva per impostazione predefinita ma disattivabile.
+- **Scelta senza interruzioni.** Il modello consigliato è distinto da quello in uso: finché non viene installato, AHIA continua a usare il miglior fallback già presente.
+- **Download con conferma.** Lo stato Da installare è ora un pulsante. Prima di contattare Ollama una finestra mostra ruolo, dimensione stimata e modalità di esecuzione prevista; il download parte solo con Conferma e scarica.
+- **Varianti riconosciute.** Le quantizzazioni dello stesso modello sono trattate come già installate e non vengono proposte due volte.
+- **Identità in testa.** Logo, nome AHIA e versione precedono il menu laterale.
+
 ## 1.24.0 — 10 agosto 2026
 
 ### Catalogo modelli e interfaccia semplificata

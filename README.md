@@ -119,12 +119,18 @@ quindi l'installazione non compila nulla.
 
 | Modello | A cosa serve | Peso |
 |---|---|---|
-| `qwen3:14b` | estrazione dai PDF nativi, analisi, chat | ~9 GB |
-| `qwen2.5vl:7b` | lettura delle scansioni (multimodale) | ~6 GB |
+| `qwen3:8b` / `qwen3:14b` | operazioni rapide e analisi approfondita | ~5 / ~9 GB |
+| `qwen3-vl:8b` | lettura delle scansioni (multimodale) | ~6 GB |
 | `bge-m3` | ricerca per significato, facoltativa | ~1,2 GB |
-| `qwen3:32b` | analisi più accurata, se la macchina lo regge | ~19 GB |
+| `qwen3:30b-instruct` | analisi più impegnative, se la macchina lo regge | ~19 GB |
 
-In **Impostazioni → Modelli e provider** la modalità automatica assegna i modelli installati a quattro ruoli e offre tre priorità: Equilibrato, Più veloce e Massima qualità. La modalità Personalizzata mantiene la scelta per ruolo e le eccezioni per singola funzione.
+In **Impostazioni → Modelli e provider** la modalità automatica rileva localmente
+RAM, VRAM o memoria unificata e propone quattro modelli proporzionati alla
+macchina. Se un consiglio non è presente, **Da installare** apre un riepilogo e
+richiede conferma prima di avviare il download con Ollama. Nel frattempo AHIA
+continua a usare un modello compatibile già installato. Sono disponibili tre
+priorità: Equilibrato, Più veloce e Massima qualità; la modalità Personalizzata
+mantiene la scelta per ruolo e le eccezioni per singola funzione.
 
 OpenAI, Anthropic e OpenRouter espongono il loro elenco aggiornato soltanto su richiesta esplicita. Disponibilità, compatibilità tecnica e validazione clinica restano stati distinti; i dettagli sono in [Configurazione dei modelli](docs/CONFIGURAZIONE_MODELLI.md).
 
@@ -355,8 +361,10 @@ volta sola, ma non si beneficia delle schede di layout.
 | `app.py` | flussi Streamlit e pagine operative |
 | `ui_navigazione.py` | menu per attività e barra laterale compatta |
 | `ui_impostazioni.py` | modelli, provider, privacy e backup |
+| `ui_modelli_locali.py` | raccomandazioni e installazione Ollama con conferma |
 | `catalogo_modelli.py` | cataloghi normalizzati Ollama e provider esterni |
 | `configurazione_modelli.py` | profili, ruoli e migrazione delle scelte storiche |
+| `hardware_modelli.py` | rilevazione locale di RAM/VRAM e selezione proporzionata |
 | `core.py` | SQLite, profilo, impostazioni, contesto per l'LLM, client Ollama |
 | `ingest.py` | lettura PDF, estrazione, diagnosi e recupero delle estrazioni |
 | `grafici.py` | serie storiche e grafici Altair |

@@ -19,10 +19,23 @@ La configurazione automatica riduce le nove funzioni interne a quattro ruoli:
 | Visione e scansioni | pagine fotografate o rasterizzate |
 | Ricerca semantica | embedding dei passaggi testuali |
 
-Le priorità **Equilibrato**, **Più veloce** e **Massima qualità** cambiano l'ordine
-con cui AHIA cerca i modelli già installati. Non avviano download. La modalità
-**Personalizzata** espone prima i quattro ruoli e, in un pannello avanzato, le
-eccezioni per singola funzione.
+Le priorità **Equilibrato**, **Più veloce** e **Massima qualità** producono una
+raccomandazione per ogni ruolo. Per impostazione predefinita AHIA la calibra
+usando RAM, VRAM NVIDIA o AMD e memoria unificata Apple rilevate localmente. La
+rilevazione non usa la rete, non salva identificativi hardware ed è
+disattivabile. Le soglie sono conservative e le dimensioni sono stime delle
+varianti pubblicate nella libreria Ollama, non una misura delle prestazioni
+cliniche.
+
+La UI separa sempre **Consigliato** da **In uso**. Se il modello consigliato
+manca, AHIA continua a usare il primo fallback compatibile già installato. Il
+pulsante **Da installare** apre una finestra con ruolo, peso stimato e modalità
+di esecuzione prevista; il download da Ollama parte soltanto con **Conferma e
+scarica**. Sono riconosciute anche le varianti quantizzate dello stesso modello.
+
+La modalità **Personalizzata** espone prima i quattro ruoli e, in un pannello
+avanzato, le eccezioni per singola funzione. In questa modalità le
+raccomandazioni hardware sono informative e non sovrascrivono le scelte.
 
 Se un archivio contiene scelte per-funzione create da una versione precedente,
 AHIA parte in modalità Personalizzata e le conserva. Nessuna migrazione sceglie

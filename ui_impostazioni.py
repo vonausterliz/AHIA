@@ -14,6 +14,7 @@ import core
 import segreti
 import semantica
 import utenti
+import ui_modelli_locali
 
 
 def _formato_data(iso: str | None) -> str:
@@ -83,43 +84,7 @@ def mostra_modelli(conn, utente: dict, password: str | None) -> None:
         st.rerun()
     st.caption(configurazione.PROFILI[profilo]["descrizione"])
 
-    righe_ruoli = []
-    for ruolo, dati in configurazione.RUOLI.items():
-        modello = (risolto["embedding"] if ruolo == "embedding"
-                   else risolto["ruoli"].get(ruolo))
-        righe_ruoli.append({
-            "Ruolo": dati["nome"],
-            "Modello": modello or "non disponibile",
-            "Stato": "installato" if modello in disponibili else "da installare",
-        })
-    st.dataframe(pd.DataFrame(righe_ruoli), hide_index=True, width="stretch")
-    mancanti_ruoli = sorted({r["Modello"] for r in righe_ruoli
-                               if r["Stato"] == "da installare"
-                               and r["Modello"] != "non disponibile"})
-    if mancanti_ruoli:
-        c_modello, c_scarica = st.columns([2, 1])
-        da_scaricare = c_modello.selectbox(
-            "Modello richiesto non installato", mancanti_ruoli,
-            key="modello_ruolo_da_scaricare")
-        if c_scarica.button(
-                "Scarica", icon=":material/download:", width="stretch",
-                key="scarica_modello_ruolo"):
-            barra = st.progress(0.0, text="Avvio del download…")
-            try:
-                for stato in core.scarica_modello(da_scaricare):
-                    totale = stato.get("total") or 0
-                    completato = stato.get("completed") or 0
-                    testo_stato = stato.get("status", "")
-                    if totale:
-                        testo_stato += (
-                            f" — {completato / totale:.0%} di {totale / 1e9:.1f} GB")
-                    barra.progress(
-                        min(completato / totale, 1.0) if totale else 0.0,
-                        text=testo_stato)
-                st.success(f"{da_scaricare} scaricato.")
-                st.rerun()
-            except core.ErroreOllama as exc:
-                st.error(str(exc))
+    ui_modelli_locali.mostra(conn, risolto, disponibili)
 
     if modalita == "personalizzato":
         st.markdown("#### Scelte per ruolo")

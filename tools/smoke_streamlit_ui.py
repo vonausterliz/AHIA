@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test isolato: bootstrap, login, disclaimer e Home autenticata."""
+"""Smoke test isolato: autenticazione, menu e conferma download modelli."""
 
 from __future__ import annotations
 
@@ -44,8 +44,14 @@ ui_impostazioni.mostra_modelli(conn, {{"id": 1, "nome_utente": "smokeadmin"}}, N
         sorgente_impostazioni, default_timeout=30).run()
     _verifica(pagina_modelli, "modelli e provider")
     assert "Modelli e provider" in [x.value for x in pagina_modelli.subheader]
+    da_installare = [b for b in pagina_modelli.button
+                      if b.label == "Da installare"]
+    assert da_installare, "nessun modello hardware proposto per il download"
+    da_installare[0].click().run()
+    _verifica(pagina_modelli, "conferma download")
+    assert any(b.label == "Conferma e scarica" for b in pagina_modelli.button)
 
-    print("OK: bootstrap, login, disclaimer, navigazione e Home")
+    print("OK: bootstrap, login, menu, Home, hardware e conferma download")
     dati.cleanup()
     return 0
 

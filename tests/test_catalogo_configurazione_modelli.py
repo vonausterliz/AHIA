@@ -5,6 +5,7 @@ from unittest import mock
 
 import catalogo_modelli as catalogo
 import configurazione_modelli as configurazione
+import hardware_modelli
 import segreti
 
 
@@ -62,6 +63,8 @@ class ConfigurazioneModelliTest(unittest.TestCase):
         self.conn.execute(
             "CREATE TABLE impostazioni (chiave TEXT PRIMARY KEY, valore TEXT NOT NULL)"
         )
+        self.hardware = hardware_modelli.ProfiloHardware(
+            ram_gb=64, vram_gb=12, gpu="GPU test", architettura="x86_64")
 
     def tearDown(self):
         self.conn.close()
@@ -74,12 +77,15 @@ class ConfigurazioneModelliTest(unittest.TestCase):
         disponibili = [
             "qwen3:14b", "qwen3:30b", "qwen2.5vl:7b", "bge-m3",
         ]
-        risultato = configurazione.risolvi(self.conn, disponibili)
+        risultato = configurazione.risolvi(
+            self.conn, disponibili, profilo_hardware=self.hardware)
 
         self.assertEqual(risultato["modalita"], "automatico")
         self.assertEqual(set(risultato["ruoli"]), set(configurazione.RUOLI))
+        self.assertEqual(risultato["raccomandati"]["rapido"], "qwen3:8b")
+        self.assertEqual(risultato["ruoli"]["rapido"], "qwen3:14b")
         self.assertEqual(risultato["scelte"]["classificazione"], "qwen3:14b")
-        self.assertEqual(risultato["scelte"]["analisi"], "qwen3:30b")
+        self.assertEqual(risultato["scelte"]["analisi"], "qwen3:14b")
         self.assertEqual(risultato["scelte"]["estrazione_vision"], "qwen2.5vl:7b")
         self.assertEqual(risultato["embedding"], "bge-m3")
 
@@ -94,7 +100,8 @@ class ConfigurazioneModelliTest(unittest.TestCase):
     def test_impostazione_storica_attiva_modalita_personalizzata(self):
         self.salva("modello.analisi", "modello-storico:latest")
 
-        risultato = configurazione.risolvi(self.conn, ["qwen3:14b"])
+        risultato = configurazione.risolvi(
+            self.conn, ["qwen3:14b"], profilo_hardware=self.hardware)
 
         self.assertEqual(risultato["modalita"], "personalizzato")
         self.assertEqual(risultato["scelte"]["analisi"], "modello-storico:latest")
@@ -104,13 +111,18 @@ class ConfigurazioneModelliTest(unittest.TestCase):
         self.salva("modelli.ruolo.approfondito", "modello-grande:latest")
 
         risultato = configurazione.risolvi(
-            self.conn, ["qwen3:14b", "modello-grande:latest"]
+            self.conn, ["qwen3:14b", "modello-grande:latest"], profilo_hardware=self.hardware
         )
 
         self.assertEqual(risultato["scelte"]["analisi"], "modello-grande:latest")
         self.assertEqual(
             risultato["scelte"]["diagnosi_estrazione"], "modello-grande:latest"
         )
+
+    def test_riconosce_variante_quantizzata_come_installata(self):
+        installato = configurazione.modello_installato(
+            "qwen3:8b", ["qwen3:8b-q4_K_M"])
+        self.assertEqual(installato, "qwen3:8b-q4_K_M")
 
     def test_filtra_modelli_per_visione_ed_embedding(self):
         disponibili = ["qwen3:14b", "qwen2.5vl:7b", "bge-m3"]

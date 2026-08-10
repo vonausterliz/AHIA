@@ -33,7 +33,9 @@ dispositivo, cosa opportuna per un'app che tratta dati sanitari.
 
 ## Il menu in breve
 
-AHIA usa un menu laterale raggruppato per attività. La barra mostra soltanto lo stato di Ollama, il profilo modelli e l’utente corrente.
+AHIA usa un menu laterale raggruppato per attività. Logo, nome e versione sono
+sempre in testa; sotto trovi le pagine e, in coda, soltanto lo stato di Ollama,
+il profilo modelli e l’utente corrente.
 
 - **Uso quotidiano:** Home, Referti, Andamenti, Assistente e Secondo parere.
 - **Gestione:** Profilo, Dizionario e riferimenti.
@@ -104,8 +106,11 @@ testi già salvati: la ri-estrazione li rigenera. È utile in particolare per la
 pseudonimizzazione del secondo parere, che lavora sul testo salvato.
 
 *Nota tecnica.* Prima di elaborare, AHIA controlla che i modelli scelti siano
-installati in Ollama; se ne manca uno, te lo dice con il comando per scaricarlo.
-I modelli si configurano in **Impostazioni → Modelli e provider**. La modalità automatica usa quattro ruoli; le eccezioni per singola funzione restano disponibili nel pannello avanzato.
+installati in Ollama. I modelli si configurano in **Impostazioni → Modelli e
+provider**: se manca un consiglio, premi **Da installare**, controlla dimensione
+e modalità di esecuzione previste e conferma il download. La modalità automatica
+usa quattro ruoli; le eccezioni per singola funzione restano disponibili nel
+pannello avanzato.
 
 ---
 
@@ -216,7 +221,19 @@ derivata dalla tua password. Se reimposti la password, dovrai reinserirle.
 
 ## Modelli e provider
 
-Per l’uso normale scegli soltanto una priorità: **Equilibrato**, **Più veloce** o **Massima qualità**. AHIA assegna i modelli installati a quattro ruoli: operazioni rapide, analisi approfondita, visione e ricerca semantica. La modalità Personalizzata mantiene le eccezioni per singola funzione.
+Per l’uso normale scegli soltanto una priorità: **Equilibrato**, **Più veloce**
+o **Massima qualità**. AHIA rileva localmente RAM, VRAM NVIDIA o AMD e memoria
+unificata Apple, quindi propone modelli proporzionati alla macchina per quattro
+ruoli: operazioni rapide, analisi approfondita, visione e ricerca semantica. La
+rilevazione non usa la rete, non salva identificativi hardware ed è disattivabile.
+
+Il modello consigliato e quello in uso sono distinti. Se il consiglio non è
+ancora presente, AHIA usa il miglior fallback compatibile già installato e
+mostra **Da installare**. Il pulsante apre una conferma con peso stimato e
+modalità di esecuzione prevista; soltanto **Conferma e scarica** contatta Ollama.
+Una quantizzazione compatibile dello stesso modello viene riconosciuta come già
+installata. La modalità Personalizzata mantiene le eccezioni per singola
+funzione e mostra i consigli senza sovrascriverle.
 
 Per OpenAI, Anthropic e OpenRouter la lista viene letta dal provider soltanto quando premi **Aggiorna elenco modelli** e resta in cache locale. La presenza nella lista indica disponibilità per l’account, non validazione clinica. Se un modello scelto scompare, AHIA avvisa e non effettua fallback silenziosi.
 
