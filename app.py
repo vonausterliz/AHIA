@@ -94,6 +94,13 @@ section[data-testid="stSidebar"] h1 {
 section[data-testid="stSidebar"] h1 span[data-testid="stIconMaterial"] {
     font-size: 2.2rem; vertical-align: -3px; }
 
+/* Logo di prodotto: più presente in testa al menu, compatto a sidebar chiusa */
+section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+    min-height: 4.7rem; align-items: flex-start; }
+section[data-testid="stSidebar"] img.stLogo {
+    height: 52px !important; max-height: 52px !important;
+    width: auto !important; max-width: 100% !important; }
+
 /* Avvisi piu' morbidi, meno "allarme" visivo */
 [data-testid="stAlert"] { border-radius: 9px; }
 </style>""", unsafe_allow_html=True)

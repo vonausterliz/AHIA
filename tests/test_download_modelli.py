@@ -6,14 +6,14 @@ import download_modelli
 
 
 class DownloadModelliTest(unittest.TestCase):
-    def attendi_fine(self, timeout=2):
+    def attendi_fine(self, quanti=1, timeout=2):
         scadenza = time.monotonic() + timeout
         while time.monotonic() < scadenza:
-            corrente = download_modelli.stato()
-            if corrente and not corrente.attivo:
-                return corrente
+            elementi = download_modelli.stati()
+            if len(elementi) == quanti and not any(x.pendente for x in elementi):
+                return elementi
             time.sleep(0.01)
-        self.fail("il download in background non è terminato")
+        self.fail("la coda dei download non è terminata")
 
     def test_avanza_e_completa_in_background(self):
         cancello = threading.Event()
@@ -26,37 +26,68 @@ class DownloadModelliTest(unittest.TestCase):
 
         avviato, _ = download_modelli.avvia("modello:test", sorgente)
         self.assertTrue(avviato)
-        self.assertTrue(download_modelli.stato().attivo)
+        self.assertTrue(download_modelli.stato().pendente)
         cancello.set()
-        finale = self.attendi_fine()
+        finale = self.attendi_fine()[0]
         self.assertEqual(finale.fase, "completato")
         self.assertEqual(finale.frazione, 1.0)
 
-    def test_impedisce_download_concorrenti(self):
+    def test_esegue_in_ordine_senza_sovrapporre(self):
+        cancello = threading.Event()
+        eventi = []
+
+        def sorgente(modello):
+            eventi.append(f"inizio:{modello}")
+            if modello == "primo:test":
+                cancello.wait(1)
+            yield {"status": "done"}
+            eventi.append(f"fine:{modello}")
+
+        primo, _ = download_modelli.avvia("primo:test", sorgente)
+        secondo, messaggio = download_modelli.avvia("secondo:test", sorgente)
+        self.assertTrue(primo)
+        self.assertTrue(secondo)
+        self.assertIn("coda", messaggio)
+        elementi = download_modelli.stati()
+        self.assertEqual(elementi[1].fase, "in_coda")
+        self.assertNotIn("inizio:secondo:test", eventi)
+
+        cancello.set()
+        self.attendi_fine(quanti=2)
+        self.assertEqual(eventi, [
+            "inizio:primo:test", "fine:primo:test",
+            "inizio:secondo:test", "fine:secondo:test",
+        ])
+
+    def test_non_accoda_due_volte_lo_stesso_modello(self):
         cancello = threading.Event()
 
         def sorgente(_):
             cancello.wait(1)
             yield {"status": "done"}
 
-        avviato, _ = download_modelli.avvia("primo:test", sorgente)
-        self.assertTrue(avviato)
-        secondo, messaggio = download_modelli.avvia("secondo:test", sorgente)
-        self.assertFalse(secondo)
-        self.assertIn("primo:test", messaggio)
+        download_modelli.avvia("duplicato:test", sorgente)
+        accettato, messaggio = download_modelli.avvia("duplicato:test", sorgente)
+        self.assertFalse(accettato)
+        self.assertIn("già", messaggio)
         cancello.set()
         self.attendi_fine()
 
-    def test_espone_errore_del_worker(self):
-        def sorgente(_):
-            raise RuntimeError("spazio insufficiente")
-            yield
+    def test_un_errore_non_blocca_il_successivo(self):
+        cancello = threading.Event()
 
-        avviato, _ = download_modelli.avvia("errore:test", sorgente)
-        self.assertTrue(avviato)
-        finale = self.attendi_fine()
-        self.assertEqual(finale.fase, "errore")
-        self.assertEqual(finale.errore, "spazio insufficiente")
+        def sorgente(modello):
+            if modello == "errore:test":
+                cancello.wait(1)
+                raise RuntimeError("spazio insufficiente")
+            yield {"status": "done"}
+
+        download_modelli.avvia("errore:test", sorgente)
+        download_modelli.avvia("successivo:test", sorgente)
+        cancello.set()
+        finale = self.attendi_fine(quanti=2)
+        self.assertEqual([x.fase for x in finale], ["errore", "completato"])
+        self.assertEqual(finale[0].errore, "spazio insufficiente")
 
 
 if __name__ == "__main__":

@@ -26,30 +26,51 @@ PAGINA_ASSISTENTE = st.Page(
 )
 
 
-def _logo_svg() -> str:
-    """Logo orizzontale nello spazio che Streamlit riserva sopra il menu."""
+def _simbolo_svg(con_testo: bool = True) -> str:
+    """Marchio AHIA, orizzontale nel menu e quadrato quando è chiuso."""
 
     versione = config.VERSIONE
+    larghezza = 330 if con_testo else 64
+    testo = f"""
+  <text class="ahia-nome" x="76" y="37" font-family="sans-serif"
+        font-size="34" font-weight="750" letter-spacing="1.2">AHIA</text>
+  <text class="ahia-sottotitolo" x="77" y="54" font-family="sans-serif"
+        font-size="11.5">I tuoi referti, chiari e sotto controllo · v{versione}</text>
+""" if con_testo else ""
     return f"""
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 42" role="img">
-  <title>AHIA — Archivio e lettura dei tuoi referti, versione {versione}</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {larghezza} 64" role="img">
+  <title>AHIA — I tuoi referti, chiari e sotto controllo</title>
+  <defs>
+    <linearGradient id="ahia-gradiente" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#199688"/>
+      <stop offset="1" stop-color="#12675f"/>
+    </linearGradient>
+  </defs>
   <style>
-    .ahia-nome {{ fill: #183c38; }}
-    .ahia-sottotitolo {{ fill: #48635f; }}
-    @media (prefers-color-scheme: dark) {{
-      .ahia-nome {{ fill: #effaf8; }}
-      .ahia-sottotitolo {{ fill: #b8d0cc; }}
+    .ahia-nome {{ fill: #173f3b; }}
+    .ahia-sottotitolo {{ fill: #536d69; }}
+     (prefers-color-scheme: dark) {{
+      .ahia-nome {{ fill: #f1fbf9; }}
+      .ahia-sottotitolo {{ fill: #bad0cc; }}
     }}
   </style>
-  <rect x="1" y="5" width="32" height="32" rx="9" fill="#147d70"/>
-  <path d="M7 21h6l3-7 5 15 3-8h5" fill="none" stroke="#fff"
-        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-  <text class="ahia-nome" x="42" y="21" font-family="sans-serif"
-        font-size="20" font-weight="700">AHIA</text>
-  <text class="ahia-sottotitolo" x="42" y="34" font-family="sans-serif"
-        font-size="9.5">Archivio e lettura dei tuoi referti · v{versione}</text>
+  <rect x="4" y="4" width="56" height="56" rx="17"
+        fill="url(#ahia-gradiente)"/>
+  <path d="M13 32h9l4-10 8 22 6-15 4 7h7" fill="none" stroke="#fff"
+        stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="13" cy="32" r="2" fill="#fff"/>
+  <circle cx="51" cy="36" r="2" fill="#fff"/>
+  {testo}
 </svg>
 """.strip()
+
+
+def _logo_svg() -> str:
+    return _simbolo_svg(con_testo=True)
+
+
+def _icona_svg() -> str:
+    return _simbolo_svg(con_testo=False)
 
 
 def costruisci(
@@ -90,7 +111,7 @@ def costruisci(
     st.logo(
         _logo_svg(),
         size="large",
-        icon_image=":material/monitor_heart:",
+        icon_image=_icona_svg(),
     )
     selezionata = st.navigation(sezioni, position="sidebar")
     pagina = selezionata.url_path or "home"
