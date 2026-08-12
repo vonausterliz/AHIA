@@ -3,7 +3,7 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
-## Non ancora rilasciato
+## 1.27.0 — 13 agosto 2026
 
 ### Giuntura fra conversione ed estrazione
 
