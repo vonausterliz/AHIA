@@ -18,6 +18,7 @@ import base64
 import json
 import re
 import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
 
 import core
@@ -205,10 +206,57 @@ def _pagine_immagini(path: Path) -> list[str]:
         doc.close()
 
 
+@dataclass(frozen=True)
+class Contenuto:
+    """Cio' che resta di un documento dopo la conversione.
+
+    E' l'unica cosa di cui l'estrazione ha bisogno: da qui in poi nessuno sa
+    piu' che l'origine fosse un PDF. `testo` e' None quando il documento e'
+    una scansione, e in quel caso le pagine stanno in `immagini`.
+    """
+
+    testo: str | None
+    immagini: list[str]
+
+    @property
+    def origine(self) -> str:
+        return "nativo" if self.testo is not None else "scansione"
+
+
+def converti(path: Path, progress=None) -> Contenuto:
+    """Legge il documento e ne ricava testo oppure pagine immagine.
+
+    E' l'unico punto del sistema che sa cos'e' un PDF: tutto il resto lavora
+    sul `Contenuto` che questa funzione produce.
+    """
+    if progress:
+        progress(f"Apertura di {path.name} ({path.stat().st_size / 1024:.0f} KB)")
+    testo = _pagine_testo(path, progress)
+    if testo is not None:
+        if progress:
+            progress(f"PDF nativo: {len(testo)} caratteri di testo estratti")
+        return Contenuto(testo=testo, immagini=[])
+    if progress:
+        progress(f"Nessuno strato di testo: rasterizzazione a {DPI_RASTER} DPI…")
+    immagini = _pagine_immagini(path)
+    if progress:
+        progress(f"{len(immagini)} pagine convertite in immagine")
+    return Contenuto(testo=None, immagini=immagini)
+
+
 def elabora_documento(path: Path, modelli: dict, tipo_forzato: str | None = None,
                       progress=None, istruzione_layout: str = "",
                       scheda_per_lab=None) -> dict:
-    """Legge un documento sanitario, lo classifica ed estrae cio' che serve.
+    """Converte un documento sanitario e ne estrae cio' che serve."""
+    return elabora(converti(path, progress), modelli, tipo_forzato=tipo_forzato,
+                   progress=progress, istruzione_layout=istruzione_layout,
+                   scheda_per_lab=scheda_per_lab)
+
+
+def elabora(contenuto: Contenuto, modelli: dict, tipo_forzato: str | None = None,
+            progress=None, istruzione_layout: str = "",
+            scheda_per_lab=None) -> dict:
+    """Classifica un contenuto gia' convertito ed estrae cio' che serve.
 
     Se `scheda_per_lab` e' una funzione, viene chiamata col laboratorio dedotto
     dalla classificazione: se restituisce una scheda di lettura, questa viene
@@ -220,25 +268,14 @@ def elabora_documento(path: Path, modelli: dict, tipo_forzato: str | None = None
       log (metriche di ogni chiamata al modello).
     """
     log: list[dict] = []
-    if progress:
-        progress(f"Apertura di {path.name} ({path.stat().st_size / 1024:.0f} KB)")
-    testo = _pagine_testo(path, progress)
-    if testo is not None:
-        immagini = []
-        if progress:
-            progress(f"PDF nativo: {len(testo)} caratteri di testo estratti")
-    else:
-        if progress:
-            progress(f"Nessuno strato di testo: rasterizzazione a {DPI_RASTER} DPI…")
-        immagini = _pagine_immagini(path)
-        if progress:
-            progress(f"{len(immagini)} pagine convertite in immagine")
-    origine = "nativo" if testo is not None else "scansione"
+    testo = contenuto.testo
+    immagini = contenuto.immagini
+    origine = contenuto.origine
 
-    def chiama(model, funzione, contenuto, imgs=None, etichetta="", layout=None):
+    def chiama(model, funzione, richiesta, imgs=None, etichetta="", layout=None):
         istr = layout if layout is not None else istruzione_layout
         dati, metrica = core.con_battito(
-            lambda: _chiama(model, funzione, contenuto, imgs, etichetta,
+            lambda: _chiama(model, funzione, richiesta, imgs, etichetta,
                             istruzione_layout=istr),
             progress=progress, etichetta=f"{model} · {etichetta or funzione}")
         log.append(metrica)
