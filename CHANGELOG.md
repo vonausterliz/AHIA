@@ -3,6 +3,21 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## Non ancora rilasciato
+
+### Giuntura fra conversione ed estrazione
+
+- **`converti` ed `elabora` separate.** `ingest.converti()` è ora l'unico punto
+  che sa cosa sia un PDF e produce un `Contenuto` — il testo, se il documento ne
+  ha uno, altrimenti le pagine come immagini. `ingest.elabora()` classifica ed
+  estrae partendo da quello, senza sapere da dove venga. `elabora_documento()`
+  resta invariata come composizione delle due: interfaccia e ri-estrazione non
+  cambiano.
+- **Prime prove di `ingest.py`.** Il modulo non ne aveva nessuna. Ora sette
+  prove coprono documento nativo e scansione, tipo forzato, prevalenza di data e
+  laboratorio letti dall'estrazione rispetto alla classificazione, e narrativa
+  per i documenti non tabellari. Girano senza PDF e senza modello in esecuzione.
+
 ## 1.26.0 — 10 agosto 2026
 
 ### Download persistenti, portabilità e audit privacy

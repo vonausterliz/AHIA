@@ -350,6 +350,25 @@ testuale e similarità semantica, ed è lì che gli embedding hanno senso.
 calcolati, e le funzioni che il modello può invocare eseguono interrogazioni
 predefinite, con i nomi degli esami validati contro l'archivio.
 
+**Il PDF è solo la sorgente del dato.** AHIA lo apre una volta, all'ingresso, e
+poi non lo guarda più: testo, valori, sintesi e frammenti finiscono
+nell'archivio, e grafici, ricerca e chat leggono solo quello. Il PDF resta sul
+disco per un motivo preciso — poterlo rileggere quando un modello migliore
+consente un'estrazione migliore.
+
+Questa separazione è esplicita nel codice. `ingest.converti()` legge il
+documento e ne ricava un `Contenuto`: il testo, se il PDF ne ha uno, oppure le
+pagine come immagini. È l'unico punto del sistema che sa cosa sia un PDF.
+`ingest.elabora()` riceve quel `Contenuto` e non sa da dove venga: classifica,
+estrae e riassume allo stesso modo. `elabora_documento()` resta la funzione di
+comodo che le compone, ed è quella che l'interfaccia continua a chiamare.
+
+La giuntura serve a due cose concrete. La prima è che il motore di estrazione
+si può collaudare con del testo, senza un PDF su disco e senza un modello in
+esecuzione — ed è così che sono nate le prime prove di `ingest.py`. La seconda è
+che un generatore di documenti sintetici può alimentare AHIA al livello giusto,
+invece di dover fabbricare PDF indistinguibili da quelli veri.
+
 ### Schede di layout: il primo referto di un laboratorio è più lento
 
 Ogni laboratorio impagina i referti a modo suo. La prima volta che ne incontra
@@ -383,7 +402,7 @@ volta sola, ma non si beneficia delle schede di layout.
 | `configurazione_modelli.py` | profili, ruoli e migrazione delle scelte storiche |
 | `hardware_modelli.py` | rilevazione locale di RAM/VRAM e selezione proporzionata |
 | `core.py` | SQLite, profilo, impostazioni, contesto per l'LLM, client Ollama |
-| `ingest.py` | lettura PDF, estrazione, diagnosi e recupero delle estrazioni |
+| `ingest.py` | conversione del PDF, estrazione, diagnosi e recupero delle estrazioni |
 | `grafici.py` | serie storiche e grafici Altair |
 | `semantica.py` | ricerca per significato con embedding |
 | `strumenti.py` | funzioni che il modello può invocare sull'archivio |
