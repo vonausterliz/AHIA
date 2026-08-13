@@ -26,14 +26,17 @@ class PrivacyAuditTest(unittest.TestCase):
     def test_registro_non_conserva_dettagli_non_dichiarati_sicuri(self):
         with tempfile.TemporaryDirectory(prefix="ahia-log-") as tmp:
             conn = core.apri_db(Path(tmp) / "salute.db")
-            sensibile = "Ada Quercia glicemia 94 [[AAAAAAAAAAAAAAAAAAAAAAAA]]"
-            core.registra_evento(
-                conn, "errore", categoria="provider", dettaglio=sensibile
-            )
-            salvato = conn.execute(
-                "SELECT dettaglio FROM eventi ORDER BY id DESC LIMIT 1"
-            ).fetchone()["dettaglio"]
-            self.assertEqual(salvato, "")
+            try:
+                sensibile = "Ada Quercia glicemia 94 [[AAAAAAAAAAAAAAAAAAAAAAAA]]"
+                core.registra_evento(
+                    conn, "errore", categoria="provider", dettaglio=sensibile
+                )
+                salvato = conn.execute(
+                    "SELECT dettaglio FROM eventi ORDER BY id DESC LIMIT 1"
+                ).fetchone()["dettaglio"]
+                self.assertEqual(salvato, "")
+            finally:
+                conn.close()
 
     @mock.patch("segreti.urllib.request.urlopen")
     def test_errore_provider_non_riflette_payload_o_chiave(self, urlopen):

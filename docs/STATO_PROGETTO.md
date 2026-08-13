@@ -4,7 +4,7 @@ Aggiornato al **13 agosto 2026**.
 
 ## Punto raggiunto
 
-La versione corrente è **1.28.0**. Comprende:
+La versione corrente è **1.28.1**. Comprende:
 
 - coda seriale dei download Ollama, non bloccante e visibile nel menu;
 - persistenza e ripresa dopo il riavvio di AHIA, controllo dello spazio libero,

@@ -20,7 +20,9 @@ class PacchettoPortabileTest(unittest.TestCase):
                 )
                 manifest = archivio.read(nome_manifest).decode("utf-8")
             self.assertTrue(manifest.startswith("# versione="))
-            self.assertIn("\n# working_tree_dirty=true\n", manifest)
+            stato = crea_pacchetto._git("status", "--porcelain")
+            atteso = "true" if stato else "false"
+            self.assertIn(f"\n# working_tree_dirty={atteso}\n", manifest)
             prefisso = nome_manifest.removesuffix("MANIFEST.sha256")
             with zipfile.ZipFile(output) as archivio:
                 for riga in manifest.splitlines():

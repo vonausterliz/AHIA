@@ -3,6 +3,16 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.28.1 — 13 agosto 2026
+
+### Portabilità della suite
+
+- Il test del pacchetto portabile accetta correttamente sia un worktree pulito
+  sia uno con modifiche consentite, verificando il valore realmente dichiarato
+  nel manifest.
+- Il test del registro eventi chiude esplicitamente SQLite prima della pulizia
+  della directory temporanea, come richiesto da Windows.
+
 ## 1.28.0 — 13 agosto 2026
 
 ### Collaudo sintetico end-to-end
