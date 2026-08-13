@@ -3,6 +3,23 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.28.0 — 13 agosto 2026
+
+### Collaudo sintetico end-to-end
+
+- **Corpus a verità nota.** Aggiunti tre referti sintetici congelati prodotti
+  dal contratto di FAKING_MEDDOC, con alias, unità, intervalli e flag attesi.
+- **Benchmark L2.** Il nuovo comando `tools/benchmark_estrazione.py` misura
+  recall, accuratezza di valori e unità e analiti allucinati senza diventare un
+  gate CI dipendente da un modello locale.
+- **Collaudi L1 e L3.** La suite verifica selezione del testo nativo rispetto
+  alla rasterizzazione, rumore del testo estratto, alias, conversioni, flag,
+  deduplica SQLite e serie storiche su tre date.
+- **Confine del secondo parere.** Un test end-to-end conferma che l'identità del
+  corpus venga pseudonimizzata prima di raggiungere il provider.
+- **Download più leggibili.** La pagina Modelli mostra percentuale, byte
+  trasferiti, coda ed esito dei download Ollama, oltre al riepilogo laterale.
+
 ## 1.27.0 — 13 agosto 2026
 
 ### Giuntura fra conversione ed estrazione

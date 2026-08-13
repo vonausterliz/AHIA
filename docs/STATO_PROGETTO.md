@@ -1,10 +1,10 @@
 # Stato del progetto AHIA
 
-Aggiornato al **10 agosto 2026**.
+Aggiornato al **13 agosto 2026**.
 
 ## Punto raggiunto
 
-La versione corrente è **1.26.0**. Comprende:
+La versione corrente è **1.28.0**. Comprende:
 
 - coda seriale dei download Ollama, non bloccante e visibile nel menu;
 - persistenza e ripresa dopo il riavvio di AHIA, controllo dello spazio libero,
@@ -15,11 +15,13 @@ La versione corrente è **1.26.0**. Comprende:
 - hardening di log, errori provider, isolamento multiutente e token alterati;
 - riconoscimento più ampio degli identificativi documentali;
 - valutazione tecnica preliminare di due modelli locali su casi sintetici.
+- corpus a verità nota prodotto da FAKING_MEDDOC, benchmark L2 e collaudi L1/L3;
+- avanzamento dei download Ollama visibile anche nella pagina Modelli.
 
 ## Verifiche eseguite
 
 - compilazione di tutti i moduli Python: superata;
-- suite automatica: **75 test su 75 superati**;
+- suite automatica: **92 test su 92 superati**;
 - smoke Streamlit autenticato: superato, inclusi Home, hardware e conferma
   download;
 - corpus PII di sviluppo: recall, precisione e tipo 100%, zero leak, zero errori

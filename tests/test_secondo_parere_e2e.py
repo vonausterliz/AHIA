@@ -2,6 +2,8 @@ import unittest
 
 import pseudonimizzazione as pseudo
 import secondo_parere_e2e
+import benchmark_estrazione
+import presidio_ahia
 
 
 class SecondoParereE2ETest(unittest.TestCase):
@@ -47,6 +49,27 @@ class SecondoParereE2ETest(unittest.TestCase):
         esito = secondo_parere_e2e.esegui(testo, entita, provider)
         self.assertNotIn("Ada Quercia", esito.risposta_reidratata)
         self.assertTrue(esito.token_malformati)
+
+
+    def test_identita_del_corpus_non_raggiunge_il_provider(self):
+        _, casi = benchmark_estrazione.carica_corpus()
+        testo = casi[0]["testo"]
+        identita = casi[0]["truth"]["paziente"]["nome_completo"]
+        entita, _ = presidio_ahia.rileva(
+            testo, profilo={"nome": identita}
+        )
+        payload_ricevuti = []
+
+        def provider(payload):
+            payload_ricevuti.append(payload)
+            self.assertNotIn(identita, payload)
+            return "Valutazione ricevuta."
+
+        esito = secondo_parere_e2e.esegui(testo, entita, provider)
+
+        self.assertEqual(len(payload_ricevuti), 1)
+        self.assertNotIn(identita, esito.payload)
+        self.assertNotIn(identita, esito.risposta_pseudonima)
 
 
 if __name__ == "__main__":

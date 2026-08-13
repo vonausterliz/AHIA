@@ -6,6 +6,8 @@ un contenuto e delle funzioni di modello finte.
 """
 
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import ingest
 
@@ -20,6 +22,38 @@ class ContenutoTest(unittest.TestCase):
         contenuto = ingest.Contenuto(testo=None, immagini=["<png>"])
 
         self.assertEqual(contenuto.origine, "scansione")
+
+
+class ConversioneTest(unittest.TestCase):
+    def test_un_testo_sufficiente_non_rasterizza_il_pdf(self):
+        with (
+            patch.object(ingest, "_pagine_testo", return_value="R" * 120),
+            patch.object(ingest, "_pagine_immagini") as rasterizza,
+        ):
+            contenuto = ingest.converti(Path("nativo.pdf"))
+
+        self.assertEqual(contenuto.origine, "nativo")
+        rasterizza.assert_not_called()
+
+    def test_una_scansione_viene_rasterizzata_una_sola_volta(self):
+        with (
+            patch.object(ingest, "_pagine_testo", return_value=None),
+            patch.object(ingest, "_pagine_immagini", return_value=["p1", "p2"]) as rasterizza,
+        ):
+            contenuto = ingest.converti(Path("scansione.pdf"))
+
+        self.assertEqual(contenuto.origine, "scansione")
+        self.assertEqual(contenuto.immagini, ["p1", "p2"])
+        rasterizza.assert_called_once()
+
+    def test_il_testo_mescolato_ha_piu_rumore_del_testo_clinico(self):
+        pulito = "Referto firmato digitalmente con glucosio e creatinina"
+        patologico = "Referto frmtnzz qwrtsdf klmnprst"
+
+        self.assertLess(
+            ingest._rumore_testo(pulito),
+            ingest._rumore_testo(patologico),
+        )
 
 
 class ElaboraTest(unittest.TestCase):

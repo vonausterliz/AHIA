@@ -153,6 +153,18 @@ def _chiama(model: str, funzione: str, contenuto: str,
     return dati, _metriche(risposta, model, etichetta or funzione)
 
 
+def _rumore_testo(testo: str) -> float:
+    """Frazione di parole con quattro consonanti consecutive."""
+    token = re.findall(r"[A-Za-zÀ-ù]{2,}", testo)
+    if not token:
+        return 1.0
+    strani = sum(
+        1 for parola in token
+        if re.search(r"[bcdfghjklmnpqrstvwxyz]{4,}", parola, re.I)
+    )
+    return strani / len(token)
+
+
 def _pagine_testo(path: Path, progress=None) -> str | None:
     """Testo del PDF, oppure None se e' una scansione.
 
@@ -175,19 +187,11 @@ def _pagine_testo(path: Path, progress=None) -> str | None:
     t_layout = "\n\n--- pagina ---\n\n".join(con_layout)
     t_lineare = "\n\n--- pagina ---\n\n".join(lineare)
 
-    # "rumore": frazione di parole con 4+ consonanti consecutive, segnale
-    # affidabile di testo mescolato da layout=True (es. "firmatoP deigrit"),
-    # senza falsi positivi sui termini clinici o sui nomi propri.
-    def rumore(t: str) -> float:
-        import re as _re
-        token = _re.findall(r"[A-Za-zÀ-ù]{2,}", t)
-        if not token:
-            return 1.0
-        strani = sum(1 for w in token
-                     if _re.search(r"[bcdfghjklmnpqrstvwxyz]{4,}", w, _re.I))
-        return strani / len(token)
-
-    scelto = t_lineare if rumore(t_lineare) < rumore(t_layout) else t_layout
+    scelto = (
+        t_lineare
+        if _rumore_testo(t_lineare) < _rumore_testo(t_layout)
+        else t_layout
+    )
     pagine = scelto.split("\n\n--- pagina ---\n\n")
     utile = sum(len(p.strip()) for p in pagine) >= MIN_CHARS_PAGINA * max(1, len(pagine))
     return scelto if utile else None

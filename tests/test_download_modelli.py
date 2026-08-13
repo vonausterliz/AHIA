@@ -6,6 +6,7 @@ import time
 import unittest
 
 import download_modelli
+import ui_modelli_locali
 
 
 class DownloadModelliTest(unittest.TestCase):
@@ -173,6 +174,25 @@ class DownloadModelliTest(unittest.TestCase):
         self.assertIn("già", messaggio)
         cancello.set()
         self.attendi_fine()
+
+    def test_testo_avanzamento_mostra_percentuale_e_byte(self):
+        elemento = download_modelli.StatoDownload(
+            id=1, modello="modello:test",
+            completato=1_000_000_000, totale=4_000_000_000,
+        )
+        self.assertEqual(
+            ui_modelli_locali._testo_avanzamento(elemento),
+            "25% · 1.0 di 4.0 GB",
+        )
+
+    def test_testo_avanzamento_spiega_la_preparazione(self):
+        elemento = download_modelli.StatoDownload(
+            id=1, modello="modello:test",
+        )
+        self.assertEqual(
+            ui_modelli_locali._testo_avanzamento(elemento),
+            "Preparazione del download…",
+        )
 
 
 if __name__ == "__main__":

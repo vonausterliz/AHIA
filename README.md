@@ -277,6 +277,8 @@ Il benchmark sintetico completo si esegue con:
 .venv/bin/python tools/benchmark_pii.py --verifica-obiettivi
 ```
 
+Il benchmark L2 dell'estrazione da testo sintetico si esegue con `.venv/bin/python tools/benchmark_estrazione.py`. Usa manifest di verità generati da FAKING_MEDDOC e riporta recall, accuratezza di valori e unità e numero di analiti allucinati; è un benchmark locale, non un gate di CI. I test `test_collaudo_dominio_sintetico.py` coprono invece L3 senza modelli: alias, conversioni, flag, deduplica e serie storiche.
+
 Il corpus indipendente, congelato e mai usato per il tuning si esegue
 separatamente:
 
@@ -411,6 +413,7 @@ volta sola, ma non si beneficia delle schede di layout.
 | `presidio_ahia.py` | adapter opzionale per Presidio e NER italiano |
 | `regole_pii.py` | regole personali cifrate ed export sanitizzato |
 | `benchmark_pii.py` | corpus sintetico, metriche e gate di qualità |
+| `benchmark_estrazione.py` | metriche L2 contro manifest di verità sintetica |
 | `secondo_parere_e2e.py` | orchestrazione testabile pseudonimizza/provider/reidrata |
 | `ollama_provider.py` | client minimale per gli smoke test Ollama locali |
 | `riferimenti.py` | intervalli di riferimento e collegamenti alle schede |

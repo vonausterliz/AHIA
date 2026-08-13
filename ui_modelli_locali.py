@@ -10,6 +10,22 @@ import download_modelli
 import hardware_modelli
 
 
+def _testo_avanzamento(elemento: download_modelli.StatoDownload) -> str:
+    """Percentuale e byte leggibili, quando Ollama li rende disponibili."""
+    if not elemento.totale:
+        return "Preparazione del download…"
+    percentuale = min(round(elemento.frazione * 100), 100)
+    scaricati = elemento.completato / 1_000_000_000
+    totale = elemento.totale / 1_000_000_000
+    return f"{percentuale}% · {scaricati:.1f} di {totale:.1f} GB"
+
+
+def _barra_download(elemento: download_modelli.StatoDownload) -> None:
+    testo = f"{elemento.modello} · {_testo_avanzamento(elemento)}"
+    st.progress(elemento.frazione, text=testo)
+    st.caption(elemento.messaggio)
+
+
 @st.dialog("Conferma il download del modello")
 def _conferma_download(
     modello: str,
@@ -111,14 +127,7 @@ def mostra_stato_download() -> None:
     corrente = next((x for x in attivita if x.attivo), None)
     in_coda = [x for x in attivita if x.fase == "in_coda"]
     if corrente:
-        testo = corrente.messaggio
-        if corrente.totale:
-            testo += (
-                f" — {corrente.frazione:.0%} di "
-                f"{corrente.totale / 1e9:.1f} GB"
-            )
-        st.progress(corrente.frazione, text=testo)
-        st.caption(f"In corso: `{corrente.modello}`")
+        _barra_download(corrente)
     if in_coda:
         nomi = " → ".join(f"`{x.modello}`" for x in in_coda)
         st.caption(f"In coda ({len(in_coda)}): {nomi}")
@@ -146,7 +155,10 @@ def mostra_stato_download() -> None:
     falliti = [x for x in attivita if x.fase == "errore"]
     annullati = sum(x.fase == "annullato" for x in attivita)
     if completati:
-        st.success(f"Modelli installati: {completati}")
+        nomi_completati = ", ".join(
+            f"`{x.modello}`" for x in attivita if x.fase == "completato"
+        )
+        st.success(f"Download completato: {nomi_completati}")
     if annullati:
         st.caption(f"Download annullati: {annullati}")
     for elemento in falliti:
@@ -164,10 +176,38 @@ def mostra_stato_download() -> None:
         st.rerun(scope="fragment")
 
 
+@st.fragment(run_every=1)
+def mostra_avanzamento_pagina() -> None:
+    """Avanzamento evidente nella pagina Modelli, oltre al riepilogo laterale."""
+    download_modelli.riprendi()
+    attivita = download_modelli.stati()
+    corrente = next((x for x in attivita if x.attivo), None)
+    in_coda = [x for x in attivita if x.fase == "in_coda"]
+    completati = [x for x in attivita if x.fase == "completato"]
+    falliti = [x for x in attivita if x.fase == "errore"]
+    if not (corrente or in_coda or completati or falliti):
+        return
+
+    st.markdown("##### Download modelli")
+    if corrente:
+        _barra_download(corrente)
+    if in_coda:
+        st.caption(
+            "In attesa: " + " → ".join(f"`{x.modello}`" for x in in_coda)
+        )
+    if not corrente and not in_coda and completati:
+        nomi = ", ".join(f"`{x.modello}`" for x in completati)
+        st.success(f"Download completato: {nomi}. Il modello è installato.")
+    for elemento in falliti:
+        st.error(f"Download di `{elemento.modello}` non riuscito.")
+    st.divider()
+
+
 def mostra(conn, risolto: dict, disponibili: list[str]) -> None:
     hardware = risolto["hardware"]
     st.markdown("#### Raccomandazioni per questa macchina")
     st.info(f":material/memory: {hardware.descrizione}")
+    mostra_avanzamento_pagina()
     usa_hardware = st.toggle(
         "Adatta automaticamente le raccomandazioni all’hardware",
         value=risolto["hardware_attivo"],
