@@ -6,6 +6,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import tempfile
+import gc
 
 
 def main() -> int:
@@ -41,8 +42,12 @@ import core
 import segreti
 import ui_impostazioni
 conn = core.apri_db({str(Path(dati.name) / "impostazioni.db")!r})
-segreti.prepara(conn)
-ui_impostazioni.mostra_modelli(conn, {{"id": 1, "nome_utente": "smokeadmin"}}, None)
+try:
+    segreti.prepara(conn)
+    ui_impostazioni.mostra_modelli(
+        conn, {{"id": 1, "nome_utente": "smokeadmin"}}, None)
+finally:
+    conn.close()
 """
     pagina_modelli = AppTest.from_string(
         sorgente_impostazioni, default_timeout=30).run()
@@ -56,6 +61,13 @@ ui_impostazioni.mostra_modelli(conn, {{"id": 1, "nome_utente": "smokeadmin"}}, N
     assert any(b.label == "Conferma e scarica" for b in pagina_modelli.button)
 
     print("OK: bootstrap, login, menu, Home, hardware e conferma download")
+    # AppTest esegue app.py nello stesso processo: le connessioni SQLite create
+    # con st.cache_resource restano quindi vive dopo l'ultima simulazione. Su
+    # Windows impedirebbero a TemporaryDirectory di cancellare i file aperti.
+    import streamlit as st
+    st.cache_resource.clear()
+    del at, pagina_modelli
+    gc.collect()
     dati.cleanup()
     return 0
 

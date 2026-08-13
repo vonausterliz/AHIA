@@ -3,6 +3,15 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.28.2 — 13 agosto 2026
+
+### Smoke test multipiattaforma
+
+- Lo smoke test Streamlit rilascia le connessioni SQLite conservate nella cache
+  prima di eliminare i dati temporanei, evitando il blocco dei file su Windows.
+- Anche la connessione usata dalla pagina Modelli viene chiusa esplicitamente
+  al termine della simulazione.
+
 ## 1.28.1 — 13 agosto 2026
 
 ### Portabilità della suite
