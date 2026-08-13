@@ -3,6 +3,14 @@
 Le versioni seguono lo schema `MAJOR.MINOR.PATCH`: cambia il numero centrale
 quando arrivano funzionalità nuove, l'ultimo quando si correggono difetti.
 
+## 1.28.3 — 13 agosto 2026
+
+### Teardown deterministico dello smoke test
+
+- AppTest viene eseguito in un processo figlio isolato: alla sua uscita Windows
+  rilascia tutte le connessioni SQLite prima che il processo padre elimini la
+  directory temporanea.
+
 ## 1.28.2 — 13 agosto 2026
 
 ### Smoke test multipiattaforma

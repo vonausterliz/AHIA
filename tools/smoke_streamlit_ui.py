@@ -5,15 +5,27 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
-import gc
 
 
 def main() -> int:
-    dati = tempfile.TemporaryDirectory(prefix="ahia-ui-smoke-")
-    os.environ["AHIA_DATA_DIR"] = dati.name
-    os.environ["AHIA_ADMIN_USER"] = "smokeadmin"
-    os.environ["AHIA_ADMIN_PASSWORD"] = "SmokePassword!123"
+    with tempfile.TemporaryDirectory(prefix="ahia-ui-smoke-") as dati:
+        ambiente = os.environ.copy()
+        ambiente["AHIA_DATA_DIR"] = dati
+        ambiente["AHIA_ADMIN_USER"] = "smokeadmin"
+        ambiente["AHIA_ADMIN_PASSWORD"] = "SmokePassword!123"
+        esito = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--worker"],
+            env=ambiente,
+            check=False,
+        )
+    return esito.returncode
+
+
+def _esegui_smoke() -> int:
+    dati = Path(os.environ["AHIA_DATA_DIR"])
 
     from streamlit.testing.v1 import AppTest
 
@@ -41,7 +53,7 @@ def main() -> int:
 import core
 import segreti
 import ui_impostazioni
-conn = core.apri_db({str(Path(dati.name) / "impostazioni.db")!r})
+conn = core.apri_db({str(dati / "impostazioni.db")!r})
 try:
     segreti.prepara(conn)
     ui_impostazioni.mostra_modelli(
@@ -61,14 +73,6 @@ finally:
     assert any(b.label == "Conferma e scarica" for b in pagina_modelli.button)
 
     print("OK: bootstrap, login, menu, Home, hardware e conferma download")
-    # AppTest esegue app.py nello stesso processo: le connessioni SQLite create
-    # con st.cache_resource restano quindi vive dopo l'ultima simulazione. Su
-    # Windows impedirebbero a TemporaryDirectory di cancellare i file aperti.
-    import streamlit as st
-    st.cache_resource.clear()
-    del at, pagina_modelli
-    gc.collect()
-    dati.cleanup()
     return 0
 
 
@@ -79,4 +83,6 @@ def _verifica(at, fase: str) -> None:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--worker"]:
+        raise SystemExit(_esegui_smoke())
     raise SystemExit(main())
