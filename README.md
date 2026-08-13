@@ -277,7 +277,7 @@ Il benchmark sintetico completo si esegue con:
 .venv/bin/python tools/benchmark_pii.py --verifica-obiettivi
 ```
 
-Il benchmark L2 dell'estrazione da testo sintetico si esegue con `.venv/bin/python tools/benchmark_estrazione.py`. Usa manifest di verità generati da FAKING_MEDDOC e riporta recall, accuratezza di valori e unità e numero di analiti allucinati; è un benchmark locale, non un gate di CI. I test `test_collaudo_dominio_sintetico.py` coprono invece L3 senza modelli: alias, conversioni, flag, deduplica e serie storiche.
+Il benchmark L2 dell'estrazione da testo sintetico si esegue con `.venv/bin/python tools/benchmark_estrazione.py`. Usa il corpus a verità nota prodotto con FAKING_MEDDOC; livelli, metriche, provenienza e procedura di aggiornamento sono descritti in [`docs/INTEGRAZIONE_FAKING_MEDDOC.md`](docs/INTEGRAZIONE_FAKING_MEDDOC.md).
 
 Il corpus indipendente, congelato e mai usato per il tuning si esegue
 separatamente:
@@ -301,126 +301,18 @@ sviluppo sono nel [rapporto Ollama](docs/VALIDAZIONE_OLLAMA.md).
 
 ## Come funziona
 
-### Architettura
+Il PDF viene convertito una sola volta in testo oppure immagini. Da quel punto
+classificazione, estrazione e sintesi lavorano su una rappresentazione interna;
+valori numerici e testo vengono poi salvati nell’archivio SQLite separato per
+utente. Grafici, ricerca e chat leggono l’archivio, non il PDF.
 
-```mermaid
-flowchart TB
-    U([Utente]) -->|carica PDF, chiede| APP[Interfaccia<br/>Streamlit]
+I modelli ordinari girano con Ollama in locale. L’unico percorso verso un
+provider esterno è il Secondo parere: parte soltanto dopo pseudonimizzazione,
+revisione del payload e conferma esplicita.
 
-    subgraph locale["La tua macchina — tutto in locale"]
-        APP --> AUTH[Autenticazione<br/>e archivi separati]
-        APP --> ESTR[Estrazione<br/>dai PDF]
-        APP --> DATI[(Archivio SQLite<br/>per utente)]
-        APP --> RICERCA[Ricerca<br/>testuale e semantica]
-        APP --> RIF[Riferimenti<br/>e dizionario]
-
-        ESTR -->|valori e testo| DATI
-        RICERCA --> DATI
-        AUTH --> DATI
-
-        ESTR -.->|classifica, estrae,<br/>analizza struttura| OLLAMA[Ollama<br/>modelli locali]
-        APP -.->|analisi, chat,<br/>secondo parere| OLLAMA
-        RICERCA -.->|embedding| OLLAMA
-    end
-
-    APP -.->|solo il secondo parere,<br/>solo dopo conferma,<br/>dati pseudonimizzati| FRONT[Claude / ChatGPT<br/>modello di frontiera]
-
-    style locale fill:#eef7ee,stroke:#5a5
-    style FRONT fill:#fdecea,stroke:#c55
-    style OLLAMA fill:#eaf1fb,stroke:#57a
-```
-
-Le frecce continue sono dati che restano sul disco; quelle tratteggiate sono
-chiamate ai modelli. L'unica freccia che esce dalla macchina è il secondo
-parere, e solo quando lo invii tu, con gli identificatori riconosciuti già
-pseudonimizzati.
-
-### Principi
-
-L'idea di fondo è usare lo strumento giusto per ogni tipo di dato.
-
-**I numeri stanno in un database relazionale.** Le domande che si fanno a una
-serie di valori sono ordinamenti, confronti e differenze: un database le esegue
-in modo esatto e completo. Una ricerca vettoriale restituirebbe i risultati più
-simili senza garantire di averli trovati tutti — su una serie storica è
-esattamente il difetto da evitare.
-
-**Il testo passa dalla ricerca.** Per i referti descrittivi servono ricerca
-testuale e similarità semantica, ed è lì che gli embedding hanno senso.
-
-**L'LLM sceglie le domande, non fa i conti.** Il contesto contiene numeri già
-calcolati, e le funzioni che il modello può invocare eseguono interrogazioni
-predefinite, con i nomi degli esami validati contro l'archivio.
-
-**Il PDF è solo la sorgente del dato.** AHIA lo apre una volta, all'ingresso, e
-poi non lo guarda più: testo, valori, sintesi e frammenti finiscono
-nell'archivio, e grafici, ricerca e chat leggono solo quello. Il PDF resta sul
-disco per un motivo preciso — poterlo rileggere quando un modello migliore
-consente un'estrazione migliore.
-
-Questa separazione è esplicita nel codice. `ingest.converti()` legge il
-documento e ne ricava un `Contenuto`: il testo, se il PDF ne ha uno, oppure le
-pagine come immagini. È l'unico punto del sistema che sa cosa sia un PDF.
-`ingest.elabora()` riceve quel `Contenuto` e non sa da dove venga: classifica,
-estrae e riassume allo stesso modo. `elabora_documento()` resta la funzione di
-comodo che le compone, ed è quella che l'interfaccia continua a chiamare.
-
-La giuntura serve a due cose concrete. La prima è che il motore di estrazione
-si può collaudare con del testo, senza un PDF su disco e senza un modello in
-esecuzione — ed è così che sono nate le prime prove di `ingest.py`. La seconda è
-che un generatore di documenti sintetici può alimentare AHIA al livello giusto,
-invece di dover fabbricare PDF indistinguibili da quelli veri.
-
-### Schede di layout: il primo referto di un laboratorio è più lento
-
-Ogni laboratorio impagina i referti a modo suo. La prima volta che ne incontra
-uno mai visto, l'app ne studia la struttura e ne ricava una **scheda di
-lettura** — dove stanno i valori, gli intervalli, cosa ignorare — che i referti
-successivi dello stesso laboratorio riusano.
-
-Questo ha un costo, ed è bene conoscerlo: **sul primo referto di ogni
-laboratorio nuovo l'estrazione viene eseguita due volte** — una per estrarre e
-capire di che laboratorio si tratta, una per applicare la scheda appena creata e
-verificare se migliora il risultato. Su una macchina lenta il primo referto può
-quindi richiedere diversi minuti. È voluto: il costo si paga **una sola volta
-per laboratorio**, e tutti i referti successivi di quello stesso laboratorio
-partono già con la scheda pronta, in una sola estrazione.
-
-Se la scheda non migliora l'estrazione iniziale, viene comunque conservata per i
-prossimi referti, e si tiene il risultato della prima estrazione. L'analisi
-preventiva della struttura si può disattivare dalla scheda *Referti*
-(`ANALISI_STRUTTURA_AUTO` in `config.py`): senza, ogni referto viene estratto una
-volta sola, ma non si beneficia delle schede di layout.
-
-### I moduli
-
-| File | Ruolo |
-|---|---|
-| `app.py` | flussi Streamlit e pagine operative |
-| `ui_navigazione.py` | menu per attività e barra laterale compatta |
-| `ui_impostazioni.py` | modelli, provider, privacy e backup |
-| `ui_modelli_locali.py` | raccomandazioni e installazione Ollama con conferma |
-| `catalogo_modelli.py` | cataloghi normalizzati Ollama e provider esterni |
-| `configurazione_modelli.py` | profili, ruoli e migrazione delle scelte storiche |
-| `hardware_modelli.py` | rilevazione locale di RAM/VRAM e selezione proporzionata |
-| `core.py` | SQLite, profilo, impostazioni, contesto per l'LLM, client Ollama |
-| `ingest.py` | conversione del PDF, estrazione, diagnosi e recupero delle estrazioni |
-| `grafici.py` | serie storiche e grafici Altair |
-| `semantica.py` | ricerca per significato con embedding |
-| `strumenti.py` | funzioni che il modello può invocare sull'archivio |
-| `parere.py` | minimizzazione e composizione del quesito per il secondo parere |
-| `pseudonimizzazione.py` | token opachi, mappa temporanea e reidratazione esatta |
-| `presidio_ahia.py` | adapter opzionale per Presidio e NER italiano |
-| `regole_pii.py` | regole personali cifrate ed export sanitizzato |
-| `benchmark_pii.py` | corpus sintetico, metriche e gate di qualità |
-| `benchmark_estrazione.py` | metriche L2 contro manifest di verità sintetica |
-| `secondo_parere_e2e.py` | orchestrazione testabile pseudonimizza/provider/reidrata |
-| `ollama_provider.py` | client minimale per gli smoke test Ollama locali |
-| `riferimenti.py` | intervalli di riferimento e collegamenti alle schede |
-| `utenti.py` | autenticazione, archivi separati, export/import |
-| `segreti.py` | chiavi API cifrate, invio ai modelli di frontiera |
-| `config.py` | percorsi, funzioni LLM, conversioni di unità, dizionario di base |
-| `avvia.sh` | crea il venv, installa, avvia |
+La pipeline completa, i confini dei componenti, la giuntura
+`converti()`/`elabora()` e le schede di layout sono in
+[`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md).
 
 ---
 
@@ -501,6 +393,18 @@ layout cambiano e un valore letto male entra nel database senza segnalarlo.
 
 Segnalazioni e contributi sono benvenuti, soprattutto se accompagnati dalla
 descrizione del referto che ha creato problemi — non dal referto stesso.
+
+Lo stato tecnico verificato e i limiti aperti sono mantenuti in
+[`docs/STATO_PROGETTO.md`](docs/STATO_PROGETTO.md).
+
+## Documentazione
+
+- [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md): componenti, fasi di elaborazione e flussi dei dati.
+- [`docs/INTEGRAZIONE_FAKING_MEDDOC.md`](docs/INTEGRAZIONE_FAKING_MEDDOC.md): corpus sintetico e collaudi L1/L2/L3.
+- [`docs/INTERFACCIA.md`](docs/INTERFACCIA.md): organizzazione e comportamento dell’interfaccia.
+- [`docs/PSEUDONIMIZZAZIONE.md`](docs/PSEUDONIMIZZAZIONE.md): confine del Secondo parere.
+- [`docs/CONFIGURAZIONE_MODELLI.md`](docs/CONFIGURAZIONE_MODELLI.md): scelta e ruoli dei modelli.
+- [`docs/STATO_PROGETTO.md`](docs/STATO_PROGETTO.md): versione verificata, test e limiti aperti.
 
 ## Ringraziamenti
 

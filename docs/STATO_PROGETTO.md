@@ -38,9 +38,9 @@ La versione corrente è **1.28.3**. Comprende:
 ## Portabilità
 
 La logica di rilevazione hardware è coperta da test simulati per AMD/Linux,
-Apple Silicon e Windows senza GPU. La CI multipiattaforma è pronta, ma i job
-remoti saranno eseguiti solo dopo il push. Il riscontro fisico svolto in locale
-resta Linux/NVIDIA; Mac, Windows e AMD reali richiedono le rispettive macchine.
+Apple Silicon e Windows senza GPU. La CI remota è verde su Linux, macOS e
+Windows con Python 3.10 e 3.12. Il riscontro fisico svolto in locale resta
+Linux/NVIDIA; Mac, Windows e AMD reali richiedono le rispettive macchine.
 
 Il pacchetto si crea con:
 
