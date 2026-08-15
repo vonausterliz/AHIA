@@ -277,7 +277,7 @@ Il benchmark sintetico completo si esegue con:
 .venv/bin/python tools/benchmark_pii.py --verifica-obiettivi
 ```
 
-Il benchmark L2 dell'estrazione da testo sintetico si esegue con `.venv/bin/python tools/benchmark_estrazione.py`. Usa il corpus a verità nota prodotto con FAKING_MEDDOC; livelli, metriche, provenienza e procedura di aggiornamento sono descritti in [`docs/INTEGRAZIONE_FAKING_MEDDOC.md`](docs/INTEGRAZIONE_FAKING_MEDDOC.md).
+Il benchmark dell’estrazione da testo sintetico si esegue con `.venv/bin/python tools/benchmark_estrazione.py`. Usa tre coppie testo/manifest prodotte realmente da FAKING_MEDDOC 0.2.22. I casi manuali per alias, unità, flag e serie storiche sono conservati in un corpus distinto e testati senza LLM. Provenienza, flusso e risultati misurati sono descritti in [`docs/INTEGRAZIONE_FAKING_MEDDOC.md`](docs/INTEGRAZIONE_FAKING_MEDDOC.md).
 
 Il corpus indipendente, congelato e mai usato per il tuning si esegue
 separatamente:
@@ -301,10 +301,17 @@ sviluppo sono nel [rapporto Ollama](docs/VALIDAZIONE_OLLAMA.md).
 
 ## Come funziona
 
-Il PDF viene convertito una sola volta in testo oppure immagini. Da quel punto
-classificazione, estrazione e sintesi lavorano su una rappresentazione interna;
-valori numerici e testo vengono poi salvati nell’archivio SQLite separato per
-utente. Grafici, ricerca e chat leggono l’archivio, non il PDF.
+Quando carichi un referto, AHIA:
+
+1. salva una copia del PDF nel tuo archivio personale;
+2. estrae il testo se il PDF lo contiene, altrimenti converte le pagine in immagini;
+3. riconosce il tipo di documento;
+4. estrae analiti e valori dai referti tabellari oppure produce una sintesi dei referti narrativi;
+5. normalizza nomi, unità e flag;
+6. salva i risultati nel database SQLite del tuo utente;
+7. usa il database per grafici, serie storiche, ricerca e chat.
+
+Il PDF resta disponibile per verificare l’estrazione e per rielaborarlo in futuro, ma le funzioni dell’applicazione lavorano sui dati archiviati.
 
 I modelli ordinari girano con Ollama in locale. L’unico percorso verso un
 provider esterno è il Secondo parere: parte soltanto dopo pseudonimizzazione,
@@ -360,8 +367,7 @@ l'archivio: se la macchina è condivisa, usa un filesystem cifrato e punta
 `AHIA_DATA_DIR` lì. Le chiavi API del secondo parere fanno eccezione: sono
 cifrate con una chiave derivata dalla password dell'utente.
 
-I PDF sono dati non fidati. Il testo estratto finisce nel database, nei grafici
-e nel prompt del modello, quindi:
+I PDF sono documenti medici reali e sensibili. AHIA li apre comunque con cautele tecniche, perché il formato può contenere strutture anomale e il testo estratto finisce nel database, nei grafici e nel prompt del modello. Di conseguenza:
 
 - i nomi dei file vengono sanificati prima di essere scritti su disco;
 - tutte le query usano parametri, mai concatenazione di stringhe;
@@ -400,7 +406,7 @@ Lo stato tecnico verificato e i limiti aperti sono mantenuti in
 ## Documentazione
 
 - [`docs/ARCHITETTURA.md`](docs/ARCHITETTURA.md): componenti, fasi di elaborazione e flussi dei dati.
-- [`docs/INTEGRAZIONE_FAKING_MEDDOC.md`](docs/INTEGRAZIONE_FAKING_MEDDOC.md): corpus sintetico e collaudi L1/L2/L3.
+- [`docs/INTEGRAZIONE_FAKING_MEDDOC.md`](docs/INTEGRAZIONE_FAKING_MEDDOC.md): percorso testuale end-to-end, corpus e risultati misurati.
 - [`docs/INTERFACCIA.md`](docs/INTERFACCIA.md): organizzazione e comportamento dell’interfaccia.
 - [`docs/PSEUDONIMIZZAZIONE.md`](docs/PSEUDONIMIZZAZIONE.md): confine del Secondo parere.
 - [`docs/CONFIGURAZIONE_MODELLI.md`](docs/CONFIGURAZIONE_MODELLI.md): scelta e ruoli dei modelli.

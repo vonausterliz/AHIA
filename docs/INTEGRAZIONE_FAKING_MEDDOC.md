@@ -1,102 +1,145 @@
-# Integrazione con FAKING_MEDDOC
+# Come AHIA viene collaudata con FAKING_MEDDOC
 
-Questo documento descrive come AHIA usa gli artefatti sintetici prodotti da FAKING_MEDDOC. È la prospettiva del **consumatore**; il formato prodotto e i gate di generazione sono documentati nel repository FAKING_MEDDOC in `docs/INTEGRAZIONE_AHIA.md`.
+## 1. Il collegamento, senza abbreviazioni
 
-FAKING_MEDDOC non è una dipendenza runtime di AHIA. Il corpus viene generato, revisionato e promosso offline; AHIA ne conserva una copia congelata e autosufficiente.
+FAKING_MEDDOC crea un referto interamente sintetico in formato testo e un file JSON che dichiara quali dati contiene. AHIA riceve quel testo, prova a estrarre gli esami e il benchmark confronta il risultato con il JSON.
 
-## Relazione fra i progetti
-
-```mermaid
-flowchart LR
-    F[FAKING_MEDDOC] -->|PDF image-only| L1[L1 conversione visuale]
-    F -->|testo sintetico| L2[L2 estrazione]
-    F -->|truth manifest| L2
-    F -->|truth manifest| AD[Adattamento corpus AHIA]
-    AD --> L3[L3 dominio]
-    N[PDF sintetici patologici costruiti a mano] -->|text layer e casi di confine| L1
+```text
+FAKING_MEDDOC                     AHIA
+---------------                   ----
+referto sintetico.txt  ────────►  ingest.elabora()
+                                      │
+truth manifest.json  ─────────────► confronto
+                                      │
+                                      ▼
+                         recall, valori, unità,
+                              allucinazioni
 ```
 
-Il PDF image-only esercita il ramo scansione/vision. Il ramo con text layer nativo viene collaudato separatamente con PDF sintetici costruiti per quel comportamento.
+Non c’è una chiamata runtime fra i due progetti. Gli output vengono generati e revisionati, poi copiati nel repository AHIA come fixture congelate.
 
-## Corpus congelato
+## 2. Perché questo test esiste
 
-La fixture canonica è [`tests/fixtures/faking_meddoc_corpus.json`](../tests/fixtures/faking_meddoc_corpus.json). Contiene soltanto referti sintetici e registra per ogni caso:
+Il normale processo di AHIA ha due passaggi indipendenti:
 
-- identificatore del caso e testo sintetico;
-- versione dello schema, versione del generatore e seed;
+1. `ingest.converti()` apre il PDF e produce testo o immagini;
+2. `ingest.elabora()` legge quel contenuto e produce dati strutturati.
+
+FAKING_MEDDOC collauda il secondo passaggio. Il testo sintetico viene inserito direttamente in:
+
+```python
+ingest.Contenuto(testo=caso["testo"], immagini=[])
+```
+
+In questo modo un errore di OCR non viene confuso con un errore di estrazione. I due rami di conversione dei PDF — text layer e scansione — sono verificati separatamente in `tests/test_ingest.py`.
+
+## 3. Il corpus end-to-end
+
+Il file [`tests/fixtures/faking_meddoc_corpus.json`](../tests/fixtures/faking_meddoc_corpus.json) contiene tre coppie testo/manifest prodotte realmente da FAKING_MEDDOC 0.2.22 con i seed:
+
+- `12001`: anemia sideropenica, emoglobina `10.5 g/dL`;
+- `12002`: diabete tipo 2, glicemia `135 mg/dL`;
+- `12005`: ipertensione, pressione sistolica `145 mmHg`.
+
+Ogni caso conserva senza modifiche:
+
+- testo completo emesso dal generatore;
+- `schema_version` e `generator_version`;
+- seed;
+- identità sintetica;
 - data e laboratorio sintetici;
-- esami attesi con nome, valore e unità;
-- aspettative di dominio AHIA, come range e flag.
+- lista degli esami con nome, valore e unità.
 
-Il truth manifest prodotto da FAKING_MEDDOC contiene il nucleo `nome`/`valore`/`unita`. Il corpus AHIA può aggiungere aspettative proprie, per esempio `range_min`, `range_max` e `flag`: questi campi sono parte del contratto di collaudo di AHIA, non del formato sorgente.
+Il PDF usato per produrre questi casi era a sua volta una fixture sintetica di FAKING_MEDDOC. Nessun documento clinico reale o dato personale è contenuto nel corpus.
 
-La `generator_version` è provenienza storica. Non va aggiornata quando esce una nuova release del produttore, ma soltanto quando il singolo caso viene rigenerato e revisionato.
+## 4. Cosa esegue il benchmark
 
-## Livelli di collaudo
+Per ogni caso `tools/benchmark_estrazione.py`:
 
-### L1 — Conversione
+1. carica il testo e il manifest;
+2. costruisce `Contenuto(testo=..., immagini=[])`;
+3. forza il tipo `analisi_sangue`, perché il test vuole misurare l’estrazione e non la classificazione;
+4. chiama `ingest.elabora()` con il modello locale configurato;
+5. normalizza esami attesi ed estratti con le stesse regole AHIA;
+6. confronta gli esami senza dipendere dall’ordine;
+7. stampa un rapporto JSON.
 
-Verifica la giuntura `ingest.converti()`:
-
-- PDF con text layer sufficiente → `Contenuto` testuale;
-- scansione o text layer insufficiente → pagine immagine;
-- gestione dei PDF non validi e dei casi limite.
-
-È deterministico e fa parte della suite automatica. Le fixture FAKING_MEDDOC coprono il percorso visuale; i PDF nativi patologici vengono costruiti nei test AHIA.
-
-```bash
-.venv/bin/python -m unittest discover -s tests -p 'test_ingest.py'
-```
-
-### L2 — Estrazione
-
-Misura l’estrazione del modello locale confrontando la risposta con la verità nota. Le metriche comprendono:
-
-- recall degli analiti;
-- accuratezza di valori e unità;
-- analiti allucinati.
-
-Poiché dipende dal modello, è un benchmark locale e non un gate deterministico di CI.
+Comando:
 
 ```bash
 .venv/bin/python tools/benchmark_estrazione.py
 ```
 
-### L3 — Regole di dominio
+Metriche:
 
-Usa direttamente la verità nota, senza modello, per verificare:
+| Metrica | Domanda a cui risponde |
+|---|---|
+| `recall_analiti` | AHIA ha trovato tutti gli esami presenti nel testo? |
+| `accuratezza_valori` | I valori estratti coincidono con quelli attesi? |
+| `accuratezza_unita` | Le unità estratte coincidono? |
+| `allucinazioni` | AHIA ha inventato esami non presenti? |
 
-- alias di analiti equivalenti;
-- conversioni di unità;
-- calcolo dei flag rispetto agli intervalli;
+Il benchmark usa un LLM e quindi non è un gate deterministico della CI. Il rapporto deve sempre indicare modello e configurazione usati quando viene pubblicato.
+
+## 5. Risultato end-to-end verificato
+
+Il 15 agosto 2026 gli stessi tre testi sono stati passati realmente a `ingest.elabora()` sulla configurazione locale:
+
+| Caso | Analiti trovati | Valori | Unità | Allucinazioni |
+|---|---:|---:|---:|---:|
+| seed 12001 | 100% | 100% | 100% | 0 |
+| seed 12002 | 100% | 100% | 100% | 0 |
+| seed 12005 | 100% | 100% | 100% | 0 |
+
+Questo risultato prova che il collegamento FAKING_MEDDOC → testo → AHIA → confronto funziona per i tre casi e il modello locale provato. Non dimostra che AHIA estragga correttamente ogni referto possibile.
+
+## 6. Il corpus delle regole di dominio è un’altra cosa
+
+Il file [`tests/fixtures/ahia_domain_corpus.json`](../tests/fixtures/ahia_domain_corpus.json) non è output diretto di FAKING_MEDDOC. È stato progettato in AHIA per verificare in modo deterministico:
+
+- alias fra `Glicemia`, `S-Glucosio` e `GLUCOSIO SIERICO`;
+- conversione `mmol/L` → `mg/dL`;
+- calcolo dei flag;
 - deduplicazione;
-- ordinamento e composizione delle serie storiche.
+- ordinamento delle serie storiche.
 
-È deterministico e fa parte della suite CI.
+Viene eseguito da:
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -p 'test_collaudo_dominio_sintetico.py'
+.venv/bin/python -m unittest discover \
+  -s tests -p 'test_collaudo_dominio_sintetico.py'
 ```
 
-## Aggiornamento del corpus
+Separare i due corpus rende esplicito cosa stiamo testando:
 
-L’aggiornamento è deliberato, non automatico:
+| Corpus | Provenienza | Oggetto del test | Usa un LLM? |
+|---|---|---|---:|
+| `faking_meddoc_corpus.json` | output reale di FAKING_MEDDOC | estrazione dal testo | sì |
+| `ahia_domain_corpus.json` | casi sintetici progettati in AHIA | regole e persistenza | no |
 
-1. generare PDF, testo e truth manifest in FAKING_MEDDOC con modalità clinica sintetica;
-2. completare i gate di sicurezza e la review umana nel progetto produttore;
-3. verificare che gli artefatti non contengano contenuto o metadati del sorgente;
-4. copiare soltanto i dati sintetici necessari nella fixture AHIA;
-5. aggiungere le aspettative di dominio AHIA senza alterare la verità prodotta;
-6. eseguire L1, L3, l’intera suite e il benchmark L2;
-7. revisionare il diff per escludere percorsi locali, PII reali e diagnostica sensibile.
+## 7. Secondo parere
 
-Nella CI non si installa né si invoca FAKING_MEDDOC: ciò evita che una modifica del produttore cambi silenziosamente le aspettative del consumatore.
+Il corpus FAKING_MEDDOC viene riutilizzato anche per controllare il confine privacy del Secondo parere. Il test prende l’identità sintetica dichiarata nel manifest, verifica che venga riconosciuta e controlla che il provider simulato non la riceva.
 
-## Privacy delle fixture
+Questo non misura l’estrazione clinica; usa lo stesso materiale sintetico per provare un confine diverso.
 
-- Non committare PDF sanitari reali, anche se autorizzati per una prova locale.
-- Non committare report diagnostici, testo OCR sorgente, nomi di file o percorsi locali.
-- Usare identità, laboratori e valori interamente sintetici.
-- Trattare ogni aggiornamento del corpus come una modifica di test soggetta a review.
+## 8. Come si aggiorna il corpus end-to-end
 
-Il percorso del Secondo parere è collaudato separatamente con identità sintetiche sentinella: il provider simulato non deve ricevere gli identificatori prima della pseudonimizzazione e la reidratazione deve essere esatta.
+L’aggiornamento deve conservare la provenienza:
+
+1. in FAKING_MEDDOC generare testo e manifest nello stesso comando;
+2. accettare soltanto casi per cui l’esportazione testuale riesce;
+3. revisionare testo e JSON e verificare che non contengano dati del PDF reale;
+4. copiare testo e manifest senza riscriverne i valori;
+5. registrare versione del generatore, seed, modalità e data;
+6. eseguire i test statici del corpus;
+7. eseguire il benchmark con il modello locale;
+8. revisionare il diff prima del commit.
+
+Una nuova release di FAKING_MEDDOC non cambia automaticamente le fixture esistenti. `generator_version` è la provenienza del singolo caso e cambia soltanto quando quel caso viene rigenerato.
+
+## 9. Limite noto del produttore
+
+FAKING_MEDDOC rifiuta l’esportazione testuale quando il modello clinico conserva contenuto derivato dal PDF reale. Oggi questo accade anche sui referti tabellari per i quali il generatore varia localmente i valori al fine di preservare il layout.
+
+Questi PDF possono essere usati per collaudi visuali, ma non devono entrare nel corpus testuale end-to-end. La limitazione è documentata nel repository FAKING_MEDDOC in `docs/ARCHITETTURA.md`.

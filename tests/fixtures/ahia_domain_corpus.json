@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "kind": "ahia_domain_rules_corpus",
+  "target_cases": 3,
+  "description": "Casi sintetici progettati in AHIA per alias, conversioni, flag, deduplica e serie storiche; non sono output diretti di FAKING_MEDDOC.",
+  "cases": [
+    {
+      "id": "glucosio_2026_01",
+      "testo": "REFERTO SINTETICO PER COLLAUDO - NON VALIDO PER USO CLINICO\nPaziente: Zaira Alonzi\nLaboratorio: Laboratorio Sintetico di Collaudo\nData referto: 2026-01-15\nEsame\tRisultato\tUnita\nGlicemia\t95\tmg/dL\n",
+      "truth": {
+        "schema_version": "1.0",
+        "paziente": {"nome_completo": "Zaira Alonzi"},
+        "data": "2026-01-15",
+        "laboratorio": {"nome": "Laboratorio Sintetico di Collaudo", "codice": "LB00012001"},
+        "esami": [
+          {"nome": "Glicemia", "valore": 95.0, "unita": "mg/dL", "range_min": 70.0, "range_max": 100.0, "flag": "N"}
+        ]
+      }
+    },
+    {
+      "id": "glucosio_2026_02",
+      "testo": "REFERTO SINTETICO PER COLLAUDO - NON VALIDO PER USO CLINICO\nPaziente: Zaira Alonzi\nLaboratorio: Laboratorio Sintetico di Collaudo\nData referto: 2026-02-15\nEsame\tRisultato\tUnita\nS-Glucosio\t5,5\tmmol/L\n",
+      "truth": {
+        "schema_version": "1.0",
+        "paziente": {"nome_completo": "Zaira Alonzi"},
+        "data": "2026-02-15",
+        "laboratorio": {"nome": "Laboratorio Sintetico di Collaudo", "codice": "LB00012002"},
+        "esami": [
+          {"nome": "S-Glucosio", "valore": 5.5, "unita": "mmol/L", "range_min": 3.9, "range_max": 5.6, "flag": "N"}
+        ]
+      }
+    },
+    {
+      "id": "glucosio_2026_03",
+      "testo": "REFERTO SINTETICO PER COLLAUDO - NON VALIDO PER USO CLINICO\nPaziente: Zaira Alonzi\nLaboratorio: Laboratorio Sintetico di Collaudo\nData referto: 2026-03-15\nEsame\tRisultato\tUnita\nGLUCOSIO SIERICO\t65\tmg/dL\n",
+      "truth": {
+        "schema_version": "1.0",
+        "paziente": {"nome_completo": "Zaira Alonzi"},
+        "data": "2026-03-15",
+        "laboratorio": {"nome": "Laboratorio Sintetico di Collaudo", "codice": "LB00012003"},
+        "esami": [
+          {"nome": "GLUCOSIO SIERICO", "valore": 65.0, "unita": "mg/dL", "range_min": 70.0, "range_max": 100.0, "flag": "L"}
+        ]
+      }
+    }
+  ]
+}

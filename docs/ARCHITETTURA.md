@@ -1,139 +1,221 @@
 # Architettura di AHIA
 
-Questo documento descrive le fasi di elaborazione, i confini dei componenti e i flussi dei dati di AHIA. Le istruzioni di installazione e uso restano nel [`README`](../README.md); lo stato verificato della release è in [`STATO_PROGETTO.md`](STATO_PROGETTO.md).
+## 1. Che cos’è AHIA
 
-## Vista complessiva
+AHIA è un archivio personale per referti medici. L’utente carica i propri PDF; AHIA ne estrae informazioni utili, le organizza nel tempo e permette di consultarle con grafici, ricerca e modelli linguistici locali.
+
+Il percorso ordinario rimane sul computer:
+
+- i PDF originali vengono conservati nell’archivio dell’utente;
+- i modelli di classificazione, estrazione, sintesi ed embedding girano con Ollama;
+- dati strutturati e testi vengono salvati in SQLite;
+- non esiste telemetria né sincronizzazione automatica.
+
+L’unica funzione che può contattare un servizio esterno è il **Secondo parere**. L’invio avviene soltanto su richiesta, dopo pseudonimizzazione e conferma del testo esatto.
+
+AHIA è software sperimentale. Non è un dispositivo medico, non produce diagnosi e non garantisce che un valore sia stato letto correttamente.
+
+## 2. Cosa succede quando si carica un referto
 
 ```mermaid
 flowchart TB
-    U([Utente]) --> APP[Interfaccia Streamlit]
-
-    subgraph locale["Macchina locale"]
-        APP --> AUTH[Autenticazione e archivi separati]
-        APP --> ING[Ingestione ed estrazione]
-        APP --> DB[(SQLite per utente)]
-        APP --> SEARCH[Ricerca testuale e semantica]
-        APP --> REF[Riferimenti e alias]
-        ING --> DB
-        SEARCH --> DB
-        AUTH --> DB
-        ING -. classificazione ed estrazione .-> OLLAMA[Ollama]
-        APP -. analisi e chat .-> OLLAMA
-        SEARCH -. embedding .-> OLLAMA
-    end
-
-    APP -. "Secondo parere: conferma esplicita e payload pseudonimizzato" .-> EXT[Provider esterno]
-
-    style locale fill:#eef7ee,stroke:#5a5
-    style OLLAMA fill:#eaf1fb,stroke:#57a
-    style EXT fill:#fdecea,stroke:#c55
+    A[1. L'utente carica un PDF reale] --> B[2. AHIA salva una copia nell'archivio personale]
+    B --> C[3. Converte il PDF in testo oppure immagini]
+    C --> D[4. Classifica il tipo di documento]
+    D --> E{Documento tabellare?}
+    E -- sì --> F[5a. Estrae analiti, valori, unità, data e laboratorio]
+    E -- no --> G[5b. Produce testo, sintesi, conclusioni e reperti]
+    F --> H[6. Normalizza nomi, unità e flag]
+    G --> I[7. Salva testo e narrativa]
+    H --> J[(8. SQLite dell'utente)]
+    I --> J
+    J --> K[9. Grafici e serie storiche]
+    J --> L[10. Ricerca e chat]
+    J --> M[11. Secondo parere facoltativo]
 ```
 
-Le operazioni ordinarie restano locali. L’unico flusso previsto verso un provider esterno è il Secondo parere, dopo minimizzazione, pseudonimizzazione, revisione e conferma esplicita dell’utente.
+### 2.1 Salvataggio del PDF
 
-## Principi architetturali
+Il PDF viene copiato nella directory dell’utente. Serve come fonte verificabile e permette di ripetere l’estrazione quando cambiano modello, prompt o regole.
 
-**Il PDF è una sorgente, non il formato interno.** Viene aperto durante l’ingestione e conservato per una futura rielaborazione, ma grafici, ricerca e chat lavorano sui dati estratti.
+Ogni utente ha file fisicamente separati. L’amministratore gestisce le utenze ma non apre gli archivi personali dall’applicazione.
 
-**I numeri sono relazionali.** Ordinamenti, differenze, conversioni e serie storiche sono eseguiti in modo deterministico sul database; non sono delegati alla ricerca vettoriale o al modello.
+### 2.2 Conversione: testo o immagini
 
-**Il testo è ricercabile.** Referti descrittivi e frammenti usano ricerca testuale e, quando configurata, similarità semantica tramite embedding locale.
+`ingest.converti()` è l’unico punto del sistema che apre il PDF.
 
-**L’LLM sceglie operazioni, non sostituisce i calcoli.** Le funzioni esposte al modello eseguono query predefinite e validano i nomi degli esami contro l’archivio.
+- Se ogni pagina contiene una quantità sufficiente di testo leggibile, AHIA estrae il text layer con `pdfplumber`.
+- Se il testo manca o è insufficiente, AHIA rasterizza le pagine a 300 DPI con PyMuPDF e le codifica come immagini.
 
-**L’isolamento utente è fisico.** Ogni utente dispone di un database e di una directory di referti separati; l’amministratore gestisce le utenze ma non accede ai loro archivi.
+Il risultato è un oggetto semplice:
 
-## Pipeline di ingestione
-
-```mermaid
-flowchart LR
-    PDF[PDF] --> C[converti]
-    C --> K{Contenuto}
-    K -->|text layer sufficiente| TXT[Testo]
-    K -->|scansione o testo insufficiente| IMG[Immagini 300 DPI]
-    TXT --> E[elabora]
-    IMG --> E
-    E --> CLASS[Classificazione]
-    CLASS --> EX[Estrazione o sintesi]
-    EX --> N[Normalizzazione]
-    N --> S[Persistenza SQLite]
-    S --> USE[Grafici, ricerca, chat]
+```python
+Contenuto(testo="...", immagini=[])
 ```
 
-La separazione è esplicita in `ingest.py`:
+oppure:
 
-- `converti()` è l’unico punto che conosce il PDF e restituisce un `Contenuto` testuale o visuale;
-- `elabora()` riceve il `Contenuto`, classifica il documento, estrae analiti o produce la sintesi;
-- `elabora_documento()` compone i due passaggi per l’interfaccia.
+```python
+Contenuto(testo=None, immagini=["pagina 1", "pagina 2"])
+```
 
-Questa giuntura consente di collaudare l’estrazione senza costruire ogni volta un PDF e permette a un corpus sintetico di alimentare direttamente il livello appropriato. Il contratto con FAKING_MEDDOC è in [`INTEGRAZIONE_FAKING_MEDDOC.md`](INTEGRAZIONE_FAKING_MEDDOC.md).
+Da questo punto in poi il motore di estrazione non dipende più dal PDF. Questa separazione è anche il punto attraverso cui FAKING_MEDDOC collauda AHIA con testo sintetico.
 
-## Schede di layout
+### 2.3 Classificazione
 
-Quando AHIA incontra per la prima volta un laboratorio, analizza il layout e costruisce una scheda di lettura con posizione dei valori, intervalli e contenuti da ignorare. Sul primo referto l’estrazione viene eseguita una seconda volta con la nuova scheda e viene conservato il risultato migliore.
+`ingest.elabora()` usa la prima parte del contenuto per riconoscere il tipo di documento: analisi del sangue, urine, ecografia, radiografia, TAC, visita, ricovero o altro.
 
-La scheda resta disponibile per i referti successivi dello stesso laboratorio, che normalmente richiedono una sola estrazione. Se la seconda estrazione non migliora il risultato iniziale, la scheda viene conservata ma il primo risultato resta quello effettivo. `ANALISI_STRUTTURA_AUTO` in `config.py` controlla questo comportamento.
+Per un PDF nativo usa il modello testuale; per una scansione usa il modello vision. La classificazione restituisce anche data, titolo e struttura o laboratorio quando riconoscibili.
 
-## Normalizzazione e persistenza
+### 2.4 Estrazione
 
-L’estrazione produce nomi e unità così come compaiono nel referto. `ingest.normalizza()` applica alias, conversioni di unità e intervalli di riferimento prima della persistenza. Le diciture sconosciute restano visibili per una mappatura controllata; le proposte del modello non vengono accettate automaticamente.
+Per i documenti tabellari AHIA estrae:
 
-I dati applicativi sono sotto `AHIA_DATA_DIR` (per default `~/.ahia`). Ogni archivio utente contiene:
+- dicitura dell’esame così come appare nel referto;
+- valore;
+- unità;
+- intervallo di riferimento, quando presente;
+- flag;
+- data del prelievo e laboratorio.
 
-| Risorsa | Ruolo |
-|---|---|
-| `salute.db` | profilo, risultati, testi e conversazioni |
-| `referti/` | copia dei PDF caricati, utile per la rielaborazione |
-| `alias_analiti.json` | dizionario personale delle diciture |
+Per i documenti narrativi conserva il testo disponibile e chiede al modello una struttura con sintesi, conclusioni e reperti rilevanti.
 
-Il database non è cifrato dall’applicazione. Su macchine condivise il confine di protezione deve essere fornito dal filesystem o dal volume cifrato.
+Le scansioni vengono elaborate pagina per pagina dal modello vision. I PDF nativi vengono passati al modello testuale come un unico contenuto.
 
-## Lettura e interrogazione
+### 2.5 Normalizzazione
 
-- `grafici.py` costruisce serie storiche e visualizzazioni dai valori normalizzati;
-- `semantica.py` indicizza e ricerca i testi tramite embedding;
-- `strumenti.py` espone al modello interrogazioni controllate sull’archivio;
-- `core.py` gestisce persistenza, contesto e client Ollama.
+Laboratori diversi usano nomi e unità differenti per lo stesso esame. `ingest.normalizza()` applica:
 
-Il modello riceve risultati già calcolati quando possibile. L’output resta sperimentale e non è una diagnosi né un parere clinico validato.
+1. dizionario degli alias, per esempio `Glicemia`, `S-Glucosio` e `GLUCOSIO SIERICO` → `GLUCOSIO`;
+2. conversioni verso l’unità canonica;
+3. intervalli di riferimento;
+4. flag `L`, `N` o `H`;
+5. controllo delle diciture sconosciute.
 
-## Secondo parere e confine esterno
+Le proposte del modello per nuovi alias devono essere confermate. Non diventano regole automaticamente.
+
+### 2.6 Persistenza
+
+I risultati normalizzati, i testi e le conversazioni vengono salvati nel database SQLite dell’utente. Grafici e calcoli leggono il database, non chiedono al modello di ricostruire i numeri ogni volta.
+
+Questo è un principio centrale: il modello estrae e interpreta; il database ordina, confronta, deduplica e calcola.
+
+## 3. Schede di lettura dei laboratori
+
+Ogni laboratorio impagina le tabelle in modo diverso. Quando AHIA incontra una struttura nuova può chiedere al modello di descriverne il layout e salvare una scheda di lettura.
+
+Sul primo referto di un laboratorio nuovo il processo può essere:
+
+1. prima estrazione senza scheda;
+2. analisi del layout;
+3. seconda estrazione con la nuova scheda;
+4. confronto e conservazione del risultato migliore.
+
+I referti successivi dello stesso laboratorio usano subito la scheda e normalmente richiedono una sola estrazione. La funzione può essere disattivata con `ANALISI_STRUTTURA_AUTO`.
+
+## 4. Come vengono usati i dati
+
+### Grafici e serie storiche
+
+`grafici.py` legge i valori normalizzati, li ordina per data e costruisce serie confrontabili. Deduplicazione, differenze e conteggi sono operazioni deterministiche sul database.
+
+### Ricerca
+
+La ricerca esatta usa testo e campi archiviati. `semantica.py` aggiunge ricerca per significato tramite embedding locale, utile per referti narrativi.
+
+### Chat e analisi
+
+Il modello riceve contesto già selezionato. Quando deve interrogare l’archivio usa le funzioni controllate in `strumenti.py`; non può eseguire query arbitrarie né viene incaricato di rifare calcoli già disponibili.
+
+## 5. Secondo parere: l’unico confine esterno
 
 ```mermaid
 sequenceDiagram
     participant U as Utente
     participant A as AHIA locale
     participant P as Provider esterno
-    U->>A: prepara il quesito
-    A->>A: minimizza e pseudonimizza
+
+    U->>A: chiede di preparare un secondo parere
+    A->>A: seleziona il minimo contenuto necessario
+    A->>A: rileva identificatori e li sostituisce con token casuali
     A-->>U: mostra il payload esatto
-    U->>A: conferma
-    A->>P: invia solo il payload confermato
-    P-->>A: risposta con token opachi
-    A->>A: reidrata per corrispondenza esatta
+    U->>A: conferma l'invio
+    A->>P: invia il payload pseudonimizzato
+    P-->>A: restituisce una risposta con token
+    A->>A: ripristina localmente solo i token esatti
     A-->>U: mostra la risposta
 ```
 
-La mappa dei token resta locale e temporanea. La reidratazione avviene soltanto per token esatti, mai per somiglianza. Presidio e il NER italiano sono un adapter opzionale; i recognizer di base restano disponibili. La specifica completa è in [`PSEUDONIMIZZAZIONE.md`](PSEUDONIMIZZAZIONE.md).
+La mappa token-valore resta nella sessione locale. Un token alterato non viene corretto per somiglianza. Regole personali e chiavi API sono cifrate; il database sanitario non lo è.
 
-## Componenti principali
+La descrizione completa dei controlli e del rischio residuo è in [`PSEUDONIMIZZAZIONE.md`](PSEUDONIMIZZAZIONE.md).
 
-| Area | File principali |
+## 6. Come FAKING_MEDDOC entra nel progetto
+
+FAKING_MEDDOC non fa parte dell’esecuzione ordinaria di AHIA. Serve a collaudare il passaggio più difficile: l’estrazione di dati clinici da testo.
+
+Il generatore produce:
+
+```text
+testo sintetico       → dato in ingresso a ingest.elabora()
+truth manifest JSON   → risposta corretta con cui confrontare l'estrazione
+```
+
+Il PDF reale usato localmente da FAKING_MEDDOC non arriva mai in AHIA. Il repository contiene soltanto coppie testo/manifest interamente sintetiche.
+
+Il percorso è stato provato end-to-end con output reali di FAKING_MEDDOC 0.2.22. Il corpus e il test sono descritti in [`INTEGRAZIONE_FAKING_MEDDOC.md`](INTEGRAZIONE_FAKING_MEDDOC.md).
+
+## 7. Archivi e isolamento
+
+Per default i dati sono sotto `~/.ahia`; `AHIA_DATA_DIR` permette di scegliere un’altra posizione.
+
+```text
+~/.ahia/
+└── archivi/
+    └── <id utente>/
+        ├── salute.db
+        ├── referti/
+        └── alias_analiti.json
+```
+
+| Elemento | Contenuto |
 |---|---|
-| interfaccia e navigazione | `app.py`, `ui_navigazione.py`, `ui_impostazioni.py` |
-| configurazione modelli | `ui_modelli_locali.py`, `catalogo_modelli.py`, `configurazione_modelli.py`, `hardware_modelli.py` |
-| ingestione | `ingest.py` |
-| persistenza e contesto | `core.py` |
-| grafici e ricerca | `grafici.py`, `semantica.py`, `strumenti.py` |
-| secondo parere | `parere.py`, `secondo_parere_e2e.py`, `pseudonimizzazione.py`, `presidio_ahia.py`, `regole_pii.py` |
+| `salute.db` | profilo, risultati, testi, impostazioni e conversazioni |
+| `referti/` | copie dei PDF caricati |
+| `alias_analiti.json` | mappature personali delle diciture |
+
+Il database non è cifrato da AHIA. Su una macchina condivisa va usato un filesystem o volume cifrato e va protetto l’account del sistema operativo.
+
+## 8. Componenti principali
+
+| Responsabilità | Moduli |
+|---|---|
+| interfaccia | `app.py`, `ui_navigazione.py`, `ui_impostazioni.py` |
+| conversione ed estrazione | `ingest.py` |
+| database e contesto | `core.py` |
+| alias e riferimenti | `config.py`, `riferimenti.py` |
+| grafici e ricerca | `grafici.py`, `semantica.py` |
+| strumenti per il modello | `strumenti.py` |
+| configurazione dei modelli | `catalogo_modelli.py`, `configurazione_modelli.py`, `hardware_modelli.py`, `ui_modelli_locali.py` |
+| Secondo parere | `parere.py`, `secondo_parere_e2e.py`, `pseudonimizzazione.py`, `presidio_ahia.py`, `regole_pii.py` |
 | utenti e segreti | `utenti.py`, `segreti.py` |
-| riferimenti e configurazione | `riferimenti.py`, `config.py` |
-| collaudi sintetici | `benchmark_pii.py`, `benchmark_estrazione.py`, `tests/fixtures/` |
+| benchmark FAKING_MEDDOC | `benchmark_estrazione.py`, `tools/benchmark_estrazione.py` |
 
-## Confini e limiti
+## 9. Cosa è deterministico e cosa no
 
-- Un PDF non fidato può contenere istruzioni che influenzano il modello; gli strumenti sono limitati a funzioni predefinite, ma una sintesi può comunque essere manipolata.
-- L’estrazione va verificata almeno sul primo referto di ogni nuovo laboratorio.
-- I modelli non sono validati clinicamente.
-- L’applicazione non cifra il database e non effettua backup o sincronizzazione cloud automatici.
-- Provider esterni ricevono dati soltanto nel percorso esplicito del Secondo parere; un errore di riconoscimento PII resta un rischio residuo.
+| Componente | Deterministico? | Conseguenza |
+|---|---:|---|
+| conversione PDF | sì, a parità di librerie e file | test automatico |
+| alias, unità, flag, deduplica, serie | sì | gate CI |
+| estrazione e sintesi con LLM | no | benchmark con metriche, non singola asserzione assoluta |
+| query e calcoli SQLite | sì | risultati ripetibili |
+| Secondo parere esterno | no | revisione umana sempre necessaria |
+
+## 10. Limiti
+
+- Un valore estratto male può entrare nel database: il primo referto di ogni laboratorio va confrontato con il PDF.
+- Un PDF può contenere istruzioni capaci di influenzare il modello; gli strumenti disponibili sono limitati, ma una sintesi può comunque essere manipolata.
+- I modelli locali ed esterni non sono validati clinicamente.
+- Il database non è cifrato e non esiste backup cloud automatico.
+- La pseudonimizzazione riduce l’esposizione ma non garantisce anonimizzazione.
+- I tre casi FAKING_MEDDOC verificati dimostrano il funzionamento del collegamento, non la qualità generale su tutti i referti italiani.

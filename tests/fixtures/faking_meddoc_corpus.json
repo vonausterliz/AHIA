@@ -1,52 +1,92 @@
 {
   "schema_version": "1.0",
-  "kind": "faking_meddoc_truth_corpus",
+  "kind": "faking_meddoc_text_truth_corpus",
   "target_cases": 3,
-  "description": "Corpus sintetico congelato per L2 e L3; nessun documento reale.",
+  "description": "Coppie testo e truth manifest prodotte realmente da FAKING_MEDDOC 0.2.22; sorgente di generazione interamente sintetico, nessun documento reale.",
+  "generation": {
+    "date": "2026-08-15",
+    "generator_version": "0.2.22",
+    "clinical_mode": "synthetic",
+    "clinical_randomization": "medium",
+    "source": "fixture sintetica create_hostile_pdf; il PDF sorgente non fa parte del corpus AHIA"
+  },
   "cases": [
     {
-      "id": "glucosio_2026_01",
-      "testo": "REFERTO SINTETICO PER COLLAUDO - NON VALIDO PER USO CLINICO\nPaziente: Zaira Alonzi\nLaboratorio: Laboratorio Sintetico di Collaudo\nData referto: 2026-01-15\nEsame\tRisultato\tUnita\nGlicemia\t95\tmg/dL\n",
+      "id": "faking_0_2_22_seed_12001",
+      "testo": "REFERTO SINTETICO PER COLLAUDO — NON VALIDO PER USO CLINICO\n\nPaziente: Piermaria Adinolfi\nCodice Paziente: PT00008417\nData di nascita: 26/08/1936\nSesso: M\nCodice fiscale: DNLPMR36M26H501M\nIndirizzo: Via di Test 19, 00000 Esempio\nTelefono: +39 000 000 0000\nEmail: piermaria.adinolfi@example.test\n\nLaboratorio: Laboratorio Sintetico di Collaudo\nCodice Lab: LB00311446\nDocumento: da56cf71-8f0f-5eb2-9b18-77eec94b1f5d\nData referto: 26/08/1976 13:15\n\nEsame\tRisultato\tUnita\nemoglobina\t10.5\tg/dL\n\nDiagnosi: Anemia sideropenica\n\nTerapie: Ferro solfato 105 mg\n\nDiagnosi: Anemia sideropenica; Terapia: Ferro solfato 105 mg; Emoglobina: 10.5 g/dL\n",
       "truth": {
+        "data": "1976-08-26",
+        "documento": {"id": "da56cf71-8f0f-5eb2-9b18-77eec94b1f5d", "tipo": "medical_report"},
+        "esami": [{"nome": "emoglobina", "unita": "g/dL", "valore": 10.5}],
+        "generator_version": "0.2.22",
+        "laboratorio": {"codice": "LB00311446", "nome": "Laboratorio Sintetico di Collaudo"},
+        "paziente": {
+          "codice": "PT00008417",
+          "codice_fiscale": "DNLPMR36M26H501M",
+          "cognome": "Adinolfi",
+          "data_nascita": "1936-08-26",
+          "email": "piermaria.adinolfi@example.test",
+          "id": "PERSON_001",
+          "indirizzo": "Via di Test 19, 00000 Esempio",
+          "nome": "Piermaria",
+          "nome_completo": "Piermaria Adinolfi",
+          "sesso": "M",
+          "telefono": "+39 000 000 0000"
+        },
         "schema_version": "1.0",
-        "generator_version": "0.2.21",
-        "seed": 12001,
-        "paziente": {"nome_completo": "Zaira Alonzi"},
-        "data": "2026-01-15",
-        "laboratorio": {"nome": "Laboratorio Sintetico di Collaudo", "codice": "LB00012001"},
-        "esami": [
-          {"nome": "Glicemia", "valore": 95.0, "unita": "mg/dL", "range_min": 70.0, "range_max": 100.0, "flag": "N"}
-        ]
+        "seed": 12001
       }
     },
     {
-      "id": "glucosio_2026_02",
-      "testo": "REFERTO SINTETICO PER COLLAUDO - NON VALIDO PER USO CLINICO\nPaziente: Zaira Alonzi\nLaboratorio: Laboratorio Sintetico di Collaudo\nData referto: 2026-02-15\nEsame\tRisultato\tUnita\nS-Glucosio\t5,5\tmmol/L\n",
+      "id": "faking_0_2_22_seed_12002",
+      "testo": "REFERTO SINTETICO PER COLLAUDO — NON VALIDO PER USO CLINICO\n\nPaziente: Pierina Giusti\nCodice Paziente: PT00008395\nData di nascita: 19/08/1960\nSesso: F\nCodice fiscale: GSTPRN60M59H501G\nIndirizzo: Via di Test 62, 00000 Esempio\nTelefono: +39 000 000 0000\nEmail: pierina.giusti@example.test\n\nLaboratorio: Laboratorio Sintetico di Collaudo\nCodice Lab: LB00310632\nDocumento: cf520a86-91d8-5ae8-9964-e1fd3b626e7b\nData referto: 19/08/1978 13:13\n\nEsame\tRisultato\tUnita\nglicemia\t135\tmg/dL\n\nDiagnosi: Diabete mellito tipo 2\n\nTerapie: Metformina 500 mg\n\nDiagnosi: Diabete mellito tipo 2; Terapia: Metformina 500 mg; Glicemia: 135 mg/dL\n",
       "truth": {
+        "data": "1978-08-19",
+        "documento": {"id": "cf520a86-91d8-5ae8-9964-e1fd3b626e7b", "tipo": "medical_report"},
+        "esami": [{"nome": "glicemia", "unita": "mg/dL", "valore": 135.0}],
+        "generator_version": "0.2.22",
+        "laboratorio": {"codice": "LB00310632", "nome": "Laboratorio Sintetico di Collaudo"},
+        "paziente": {
+          "codice": "PT00008395",
+          "codice_fiscale": "GSTPRN60M59H501G",
+          "cognome": "Giusti",
+          "data_nascita": "1960-08-19",
+          "email": "pierina.giusti@example.test",
+          "id": "PERSON_001",
+          "indirizzo": "Via di Test 62, 00000 Esempio",
+          "nome": "Pierina",
+          "nome_completo": "Pierina Giusti",
+          "sesso": "F",
+          "telefono": "+39 000 000 0000"
+        },
         "schema_version": "1.0",
-        "generator_version": "0.2.21",
-        "seed": 12002,
-        "paziente": {"nome_completo": "Zaira Alonzi"},
-        "data": "2026-02-15",
-        "laboratorio": {"nome": "Laboratorio Sintetico di Collaudo", "codice": "LB00012002"},
-        "esami": [
-          {"nome": "S-Glucosio", "valore": 5.5, "unita": "mmol/L", "range_min": 3.9, "range_max": 5.6, "flag": "N"}
-        ]
+        "seed": 12002
       }
     },
     {
-      "id": "glucosio_2026_03",
-      "testo": "REFERTO SINTETICO PER COLLAUDO - NON VALIDO PER USO CLINICO\nPaziente: Zaira Alonzi\nLaboratorio: Laboratorio Sintetico di Collaudo\nData referto: 2026-03-15\nEsame\tRisultato\tUnita\nGLUCOSIO SIERICO\t65\tmg/dL\n",
+      "id": "faking_0_2_22_seed_12005",
+      "testo": "REFERTO SINTETICO PER COLLAUDO — NON VALIDO PER USO CLINICO\n\nPaziente: Enrico Broschi\nCodice Paziente: PT00008304\nData di nascita: 03/10/1968\nSesso: M\nCodice fiscale: BRSNRC68R03H501G\nIndirizzo: Via di Test 7, 00000 Esempio\nTelefono: +39 000 000 0000\nEmail: enrico.broschi@example.test\n\nLaboratorio: Laboratorio Sintetico di Collaudo\nCodice Lab: LB00307265\nDocumento: 4d872cbb-f091-5929-bdff-ca5fb198599f\nData referto: 03/10/2041 11:08\n\nEsame\tRisultato\tUnita\npressione sistolica\t145\tmmHg\n\nDiagnosi: Ipertensione arteriosa\n\nTerapie: Amlodipina 5 mg\n\nDiagnosi: Ipertensione arteriosa; Terapia: Amlodipina 5 mg; Pressione sistolica: 145 mmHg\n",
       "truth": {
+        "data": "2041-10-03",
+        "documento": {"id": "4d872cbb-f091-5929-bdff-ca5fb198599f", "tipo": "medical_report"},
+        "esami": [{"nome": "pressione sistolica", "unita": "mmHg", "valore": 145.0}],
+        "generator_version": "0.2.22",
+        "laboratorio": {"codice": "LB00307265", "nome": "Laboratorio Sintetico di Collaudo"},
+        "paziente": {
+          "codice": "PT00008304",
+          "codice_fiscale": "BRSNRC68R03H501G",
+          "cognome": "Broschi",
+          "data_nascita": "1968-10-03",
+          "email": "enrico.broschi@example.test",
+          "id": "PERSON_001",
+          "indirizzo": "Via di Test 7, 00000 Esempio",
+          "nome": "Enrico",
+          "nome_completo": "Enrico Broschi",
+          "sesso": "M",
+          "telefono": "+39 000 000 0000"
+        },
         "schema_version": "1.0",
-        "generator_version": "0.2.21",
-        "seed": 12003,
-        "paziente": {"nome_completo": "Zaira Alonzi"},
-        "data": "2026-03-15",
-        "laboratorio": {"nome": "Laboratorio Sintetico di Collaudo", "codice": "LB00012003"},
-        "esami": [
-          {"nome": "GLUCOSIO SIERICO", "valore": 65.0, "unita": "mg/dL", "range_min": 70.0, "range_max": 100.0, "flag": "L"}
-        ]
+        "seed": 12005
       }
     }
   ]

@@ -13,6 +13,9 @@ import ingest
 CORPUS_PREDEFINITO = (
     Path(__file__).parent / "tests" / "fixtures" / "faking_meddoc_corpus.json"
 )
+CORPUS_DOMINIO = (
+    Path(__file__).parent / "tests" / "fixtures" / "ahia_domain_corpus.json"
+)
 
 
 def carica_corpus(path: Path = CORPUS_PREDEFINITO) -> tuple[dict, list[dict]]:

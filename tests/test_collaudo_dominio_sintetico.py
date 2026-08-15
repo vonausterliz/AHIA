@@ -9,9 +9,11 @@ import ingest
 
 class CollaudoDominioSinteticoTest(unittest.TestCase):
     def setUp(self):
-        self.metadata, self.casi = benchmark_estrazione.carica_corpus()
+        self.metadata, self.casi = benchmark_estrazione.carica_corpus(
+            benchmark_estrazione.CORPUS_DOMINIO
+        )
         self.alias = ingest.carica_alias(
-            benchmark_estrazione.CORPUS_PREDEFINITO.with_name("non-esiste.json")
+            benchmark_estrazione.CORPUS_DOMINIO.with_name("non-esiste.json")
         )
         self.conn = core.apri_db(":memory:")
 

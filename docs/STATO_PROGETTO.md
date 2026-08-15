@@ -1,6 +1,6 @@
 # Stato del progetto AHIA
 
-Aggiornato al **13 agosto 2026**.
+Aggiornato al **15 agosto 2026**.
 
 ## Punto raggiunto
 
@@ -15,13 +15,16 @@ La versione corrente è **1.28.3**. Comprende:
 - hardening di log, errori provider, isolamento multiutente e token alterati;
 - riconoscimento più ampio degli identificativi documentali;
 - valutazione tecnica preliminare di due modelli locali su casi sintetici.
-- corpus a verità nota prodotto da FAKING_MEDDOC, benchmark L2 e collaudi L1/L3;
+- corpus end-to-end prodotto realmente da FAKING_MEDDOC e corpus separato per le regole di dominio AHIA;
 - avanzamento dei download Ollama visibile anche nella pagina Modelli.
 
 ## Verifiche eseguite
 
 - compilazione di tutti i moduli Python: superata;
-- suite automatica: **92 test su 92 superati**;
+- suite automatica: **93 test su 93 superati**;
+- benchmark testuale FAKING_MEDDOC → AHIA: tre casi su tre con recall,
+  accuratezza di valori e unità al 100% e zero analiti allucinati sulla
+  configurazione locale provata;
 - smoke Streamlit autenticato: superato, inclusi Home, hardware e conferma
   download;
 - corpus PII di sviluppo: recall, precisione e tipo 100%, zero leak, zero errori
